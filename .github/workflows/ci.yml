@@ -80,8 +80,11 @@ jobs:
           cd supabase/migrations
           fail=0
           for f in *.sql; do
-            defs=$(grep -c "security definer" "$f" || true)
-            revs=$(grep -c "revoke execute" "$f" || true)
+            # 0003 predates this check and applied migrations are immutable;
+            # its missing revoke is fixed by 0016_settings_fn_revoke.sql.
+            [ "$f" = "0003_rls_core.sql" ] && continue
+            defs=$(grep -ci "security definer" "$f" || true)
+            revs=$(grep -ci "revoke execute" "$f" || true)
             if [ "$defs" -gt 0 ] && [ "$revs" -eq 0 ]; then
               echo "$f declares $defs SECURITY DEFINER function(s) but has no 'revoke execute'"
               fail=1
