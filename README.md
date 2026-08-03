@@ -113,7 +113,7 @@ world-executable.
 Everything below needs account access only the owner has. The code side is
 done; each item unlocks one production property.
 
-1. **Vercel (takes the app off localhost).** vercel.com → Add New Project →
+1. **Vercel — DONE 2026-08-03.** Live at https://start-reels.vercel.app (team start-lands-inc, project start-reels, CLI-deployed). ALLOWED_ORIGIN includes the prod domains. Redeploy: `npx vercel deploy --prod` in web/ with VERCEL_TOKEN from .env. Original step, kept for a custom domain later: vercel.com → Add New Project →
    import `StartAnimationTeam/START-Reels`, root directory `web/`. **Pro
    plan** (Hobby blocks git deploys when the commit author isn't the account
    owner). Add the env vars from `web/.env.local.example` with real values.
