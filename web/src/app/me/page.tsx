@@ -105,12 +105,22 @@ export default async function ProfilePage() {
         )}
       </section>
 
-      <p className="mt-8 text-xs text-ink-faint">
-        Watch history, favorites and notification settings arrive in Phase 4.{' '}
-        <Link href="/" className="underline hover:text-ink-muted">
-          Back home
-        </Link>
-      </p>
+      <nav className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          { href: '/me/credits', label: 'Credits & rewards' },
+          { href: '/me/history', label: 'Watch history' },
+          { href: '/me/favorites', label: 'My list' },
+          { href: '/me/settings', label: 'Settings' },
+        ].map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="rounded-xl border border-line bg-surface p-4 text-sm text-ink-secondary transition-colors hover:border-line-strong hover:text-ink"
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
     </div>
   )
 }

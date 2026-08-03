@@ -143,6 +143,12 @@ export interface Database {
         Update: never
         Relationships: []
       }
+      daily_reward_claims: {
+        Row: { user_id: string; claim_date: string; amount: number; ledger_id: string; claimed_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       profiles: {
         Row: {
           user_id: string
@@ -252,6 +258,14 @@ export interface Database {
       }
     }
     Functions: {
+      claim_daily_reward: {
+        Args: Record<string, never>
+        Returns: { claimed: number; date: string }
+      }
+      redeem_promo: {
+        Args: { p_code: string }
+        Returns: { granted: number; name: string }
+      }
       recommended_videos: {
         Args: { p_limit?: number }
         Returns: {
