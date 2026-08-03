@@ -66,8 +66,8 @@ can read, reason about and typecheck the code.
 
 | Phase | | |
 |---|---|---|
-| **0** | Foundations — auth, identity + ledger schema, RLS, webhook | **schema applied, RLS gate green; awaiting `CLERK_WEBHOOK_SECRET`** |
-| 1 | Ingest & catalogue — Bunny upload, transcode, thumbnails | not started |
+| **0** | Foundations — auth, identity + ledger schema, RLS, webhook | **done** — 40/40 checks green against the live project |
+| 1 | Ingest & catalogue — Bunny upload, transcode, thumbnails | **next** — needs Bunny credentials |
 | 2 | Playback & credits — entitlements, signed URLs, heartbeats | not started |
 | 3 | Browse — search, rails, recommendations, favorites | not started |
 | 4 | Profile & wallet | not started |
@@ -78,20 +78,27 @@ can read, reason about and typecheck the code.
 
 ## Tests
 
-**`scripts/test-rls.mjs` is the Phase 0 gate.** It creates two real Clerk users,
-mints real session tokens, and asserts that user A cannot read user B's ledger,
-balance or profile — and that neither can escalate their own role or mint their
-own credits.
-
 ```bash
-node scripts/test-rls.mjs
+npm run verify     # all four suites, ~1 min
 ```
 
-It exists because of a specific failure mode: under a third-party JWT issuer,
-**RLS returns an empty array rather than an error** when the integration is
-misconfigured. A broken auth chain and a brand-new account look identical. The
-sibling project never resolved this and its client-side RLS is decorative as a
-result. Do not build past Phase 0 until this is green.
+| | |
+|---|---|
+| `db:verify` | Schema shape: RLS on every table, `security_invoker` on every view, no user-id-taking `SECURITY DEFINER` function callable by a public role, audit log append-only, and live ledger semantics (hold reduces balance, reversal restores it, overspend raises) |
+| `test:rls` | **The Phase 0 gate.** Two real Clerk users, real session tokens: A cannot read B's ledger, balance or profile, and neither can escalate a role or mint credits |
+| `test:webhook` | Signs payloads the way svix does and posts them at the deployed function — forged signatures rejected, and a replay does not double-grant |
+| `test:signup` | The acceptance test: creates a real Clerk user and waits for the profile and credits to appear. Proves *delivery*, which the others cannot |
+
+**Why `test:rls` is a gate and not just a test.** Under a third-party JWT
+issuer, **RLS returns an empty array rather than an error** when misconfigured.
+A broken auth chain and a brand-new account are indistinguishable. It caught a
+real leak on its first run — see `0004_view_security_invoker.sql`. Do not build
+past Phase 0 without it green.
+
+**Why `test:webhook` and `test:signup` are separate.** One proves the handler is
+correct; the other proves Clerk is actually configured to call it. A perfect
+handler behind an unregistered endpoint produces a user who exists in Clerk,
+cannot be found in Postgres, and has no credits — while nothing errors anywhere.
 
 The credential-free suites (`test-credits`, `test-entitlements`,
 `test-watchtime`) arrive with Phase 2 and run in CI.

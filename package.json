@@ -8,7 +8,13 @@
     "node": ">=22.0.0"
   },
   "scripts": {
+    "verify": "node scripts/db-verify.mjs && node scripts/test-rls.mjs && node scripts/test-webhook.mjs && node scripts/test-signup-live.mjs",
     "test:rls": "node scripts/test-rls.mjs",
+    "test:webhook": "node scripts/test-webhook.mjs",
+    "test:signup": "node scripts/test-signup-live.mjs",
+    "db:apply": "node scripts/db-apply.mjs",
+    "db:status": "node scripts/db-apply.mjs --status",
+    "db:verify": "node scripts/db-verify.mjs",
     "db:push": "supabase db push",
     "db:types": "supabase gen types typescript --project-id ioulkocgnprfyofmvnbd > web/src/lib/database.types.ts",
     "fn:deploy": "supabase functions deploy",
