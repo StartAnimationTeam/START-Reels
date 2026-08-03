@@ -114,6 +114,18 @@ Each of these has cost someone real time.
 8. **Wrap RLS helper predicates**: `(select has_role('administrator'))`, not
    `has_role('administrator')`. Unwrapped, Postgres re-evaluates per row and the
    admin tables time out.
+8b. **A VIEW bypasses RLS unless you say otherwise.** A Postgres view runs with
+   the privileges of its *owner*, and the owner (`postgres`) bypasses RLS — so a
+   view over an RLS-protected table exposes every row, no matter how correct the
+   table's policy is. `credit_balances` leaked every user's balance exactly this
+   way; `scripts/test-rls.mjs` caught it on its first run and
+   `0004_view_security_invoker.sql` fixed it.
+
+   **Every view over a protected table must `set (security_invoker = on)`.**
+   This is invisible to inspection: the table looks locked down, the policy
+   reads correctly, and direct queries on the table behave. Only a query
+   *through the view, as a real user* reveals it. `scripts/db-verify.mjs`
+   asserts it for all views so a new one cannot reintroduce the hole.
 9. **`ALLOWED_ORIGIN` is never `*`.** Edge Functions need manual CORS headers
    and `verify_jwt = false` in `config.toml` when they do their own Clerk
    verification — otherwise the platform 401s before your code runs.

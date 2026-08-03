@@ -2,17 +2,17 @@
 /**
  * THE PHASE 0 GATE.
  *
- * Proves that Row Level Security actually isolates users. Do not build past
- * Phase 0 until this passes.
+ * Proves Row Level Security actually isolates users. Do not build past Phase 0
+ * until this passes.
  *
- * Why this script exists rather than a code review:
+ * Why this exists rather than a code review:
  *
- * Under a third-party JWT issuer, `auth.uid()` is NULL and every policy reads
- * `auth.jwt()->>'sub'` instead. If the Clerk↔Supabase Third-Party Auth
+ * Under a third-party JWT issuer `auth.uid()` is NULL, so every policy reads
+ * `auth.jwt()->>'sub'` instead. If the Clerk<->Supabase Third-Party Auth
  * integration is not enabled in the Supabase dashboard, or a client is built
- * without the `accessToken` callback, **RLS does not error — it returns an
- * empty array**. A brand-new account and a completely broken auth chain look
- * byte-for-byte identical from the application's point of view.
+ * without the accessToken callback, **RLS does not error - it returns an empty
+ * array**. A broken auth chain and a brand-new account look byte-for-byte
+ * identical from the application's point of view.
  *
  * The sibling project (START AI Studio) never resolved this. Its
  * supabase/README.md says outright that whether the integration is enabled
@@ -20,71 +20,101 @@
  * the service role and its client-side RLS is decorative. This project does not
  * inherit that.
  *
- * Usage:
- *   node scripts/test-rls.mjs
+ * Deliberately uses plain fetch against PostgREST rather than supabase-js:
+ *   - it is the actual wire format, so nothing can be hidden by a client
+ *     library's error handling;
+ *   - it runs on any Node with fetch, including CI, with zero dependencies.
  *
- * Requires in .env:  SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
- *                    CLERK_SECRET_KEY
+ * Usage:  node scripts/test-rls.mjs
+ * Needs in .env: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
+ *                CLERK_SECRET_KEY
  */
 
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { createClient } from '@supabase/supabase-js'
-
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-// ── env ────────────────────────────────────────────────────────────────────
-function loadEnv() {
-  try {
-    const text = readFileSync(join(ROOT, '.env'), 'utf8')
-    for (const line of text.split('\n')) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
-      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '')
-    }
-  } catch {
-    /* env may come from the shell instead */
+try {
+  for (const line of readFileSync(join(ROOT, '.env'), 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '')
   }
+} catch {
+  /* env may come from the shell instead */
 }
-loadEnv()
 
-const {
+const { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, CLERK_SECRET_KEY } = process.env
+
+const missing = Object.entries({
   SUPABASE_URL,
   SUPABASE_ANON_KEY,
   SUPABASE_SERVICE_ROLE_KEY,
   CLERK_SECRET_KEY,
-} = process.env
+})
+  .filter(([, v]) => !v)
+  .map(([k]) => k)
 
-// ── tiny harness ───────────────────────────────────────────────────────────
+if (missing.length) {
+  console.error(`\nMissing env: ${missing.join(', ')}\n`)
+  process.exit(2)
+}
+
+// -- harness ----------------------------------------------------------------
+const GREEN = '\x1b[32m'
+const RED = '\x1b[31m'
+const OFF = '\x1b[0m'
+
 let passed = 0
-let failed = 0
 const failures = []
 
 function check(name, ok, detail = '') {
   if (ok) {
     passed++
-    console.log(`  [32mPASS[0m  ${name}`)
+    console.log(`  ${GREEN}PASS${OFF}  ${name}`)
   } else {
-    failed++
-    failures.push(`${name}${detail ? ` — ${detail}` : ''}`)
-    console.log(`  [31mFAIL[0m  ${name}${detail ? `\n        ${detail}` : ''}`)
+    failures.push(`${name}${detail ? ` - ${detail}` : ''}`)
+    console.log(`  ${RED}FAIL${OFF}  ${name}${detail ? `\n        ${detail}` : ''}`)
   }
 }
 
-function requireEnv() {
-  const missing = []
-  if (!SUPABASE_URL) missing.push('SUPABASE_URL')
-  if (!SUPABASE_ANON_KEY) missing.push('SUPABASE_ANON_KEY')
-  if (!SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY')
-  if (!CLERK_SECRET_KEY) missing.push('CLERK_SECRET_KEY')
-  if (missing.length) {
-    console.error(`\nMissing env: ${missing.join(', ')}\nSet them in .env — see .env.example.\n`)
-    process.exit(2)
+// -- PostgREST --------------------------------------------------------------
+/**
+ * `token` is either a Clerk session JWT (the browser case) or the service role
+ * key (the trusted case). Passing the Clerk JWT straight through as the bearer
+ * is exactly what supabase-js's accessToken callback does internally.
+ */
+async function rest(path, { token, apikey = SUPABASE_ANON_KEY, method = 'GET', body, prefer } = {}) {
+  const headers = { apikey, 'Content-Type': 'application/json' }
+  // Only a real JWT goes in Authorization. The new-format keys
+  // (sb_publishable_… / sb_secret_…) are NOT JWTs — PostgREST tries to parse
+  // the bearer and fails with "Expected 3 parts in JWT; got 1". They identify
+  // the role through the apikey header instead.
+  if (token) headers.Authorization = `Bearer ${token}`
+  if (prefer) headers.Prefer = prefer
+
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+
+  const text = await res.text()
+  let json = null
+  try {
+    json = text ? JSON.parse(text) : null
+  } catch {
+    json = text
   }
+  return { ok: res.ok, status: res.status, data: json }
 }
 
-// ── Clerk helpers ──────────────────────────────────────────────────────────
+/** Service role: bypasses RLS. Used only to seed and clean up. */
+const svc = (path, opts = {}) =>
+  rest(path, { ...opts, apikey: SUPABASE_SERVICE_ROLE_KEY, token: undefined })
+
+// -- Clerk ------------------------------------------------------------------
 async function clerk(path, init = {}) {
   const res = await fetch(`https://api.clerk.com/v1${path}`, {
     ...init,
@@ -94,9 +124,9 @@ async function clerk(path, init = {}) {
       ...(init.headers ?? {}),
     },
   })
-  const body = await res.text()
-  if (!res.ok) throw new Error(`clerk ${path} -> ${res.status}: ${body}`)
-  return body ? JSON.parse(body) : null
+  const text = await res.text()
+  if (!res.ok) throw new Error(`clerk ${path} -> ${res.status}: ${text}`)
+  return text ? JSON.parse(text) : null
 }
 
 async function createTestUser(tag) {
@@ -112,11 +142,11 @@ async function createTestUser(tag) {
 }
 
 /**
- * Mint a real session token for a user, which is what the browser would send.
- * Signing our own JWT would prove nothing — the point is to exercise the same
- * token Supabase will see in production.
+ * Mint a REAL session token - the same thing the browser would send. Signing a
+ * JWT ourselves would prove nothing, because the point is to exercise the token
+ * Supabase will actually see.
  */
-async function sessionTokenFor(userId) {
+async function sessionFor(userId) {
   const session = await clerk('/sessions', {
     method: 'POST',
     body: JSON.stringify({ user_id: userId }),
@@ -125,197 +155,198 @@ async function sessionTokenFor(userId) {
     method: 'POST',
     body: JSON.stringify({}),
   })
-  return { token: token.jwt, sessionId: session.id }
+  return { id: session.id, jwt: token.jwt }
 }
 
-function scopedClient(jwt) {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    accessToken: async () => jwt,
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
-}
-
-// ── the run ────────────────────────────────────────────────────────────────
+// -- the run ----------------------------------------------------------------
 async function main() {
-  requireEnv()
-  console.log('\nRLS isolation — Phase 0 gate\n')
-
-  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
+  console.log('\nRLS isolation - Phase 0 gate\n')
 
   let alice, bob, aliceSession, bobSession
 
   try {
-    console.log('Setting up two real Clerk users…')
+    console.log('Setting up two real Clerk users...')
     ;[alice, bob] = await Promise.all([createTestUser('alice'), createTestUser('bob')])
 
-    // Seed directly rather than waiting on the webhook — this script tests RLS,
+    // Seed directly rather than waiting on the webhook - this script tests RLS,
     // not delivery timing.
     for (const u of [alice, bob]) {
-      await admin.from('profiles').upsert(
-        { user_id: u.id, email: u.email_addresses[0].email_address, display_name: 'RLS test' },
-        { onConflict: 'user_id' },
-      )
+      await svc('profiles', {
+        method: 'POST',
+        prefer: 'resolution=merge-duplicates',
+        body: {
+          user_id: u.id,
+          email: u.email_addresses[0].email_address,
+          display_name: 'RLS test',
+        },
+      })
     }
 
     // Alice gets credits; Bob deliberately gets none, so "Bob sees Alice's
     // ledger" and "Bob sees nothing" are distinguishable outcomes.
-    const { error: grantErr } = await admin.rpc('grant_credits', {
-      p_user_id: alice.id,
-      p_amount: 42,
-      p_reason: 'admin_grant',
-      p_reference_type: 'admin_grant',
-      p_reference_id: 'rls-test',
-      p_credit_type: 'watch',
-      p_idempotency_key: `rls-test:${alice.id}`,
-      p_metadata: { test: true },
+    const grant = await svc('rpc/grant_credits', {
+      method: 'POST',
+      body: {
+        p_user_id: alice.id,
+        p_amount: 42,
+        p_reason: 'admin_grant',
+        p_reference_type: 'admin_grant',
+        p_reference_id: 'rls-test',
+        p_credit_type: 'watch',
+        p_idempotency_key: `rls-test:${alice.id}:${Date.now()}`,
+        p_metadata: { test: true },
+      },
     })
-    if (grantErr) throw new Error(`seed grant failed: ${grantErr.message}`)
+    if (!grant.ok) throw new Error(`seed grant failed: ${JSON.stringify(grant.data)}`)
 
-    ;[aliceSession, bobSession] = await Promise.all([
-      sessionTokenFor(alice.id),
-      sessionTokenFor(bob.id),
-    ])
+    ;[aliceSession, bobSession] = await Promise.all([sessionFor(alice.id), sessionFor(bob.id)])
 
-    const asAlice = scopedClient(aliceSession.token)
-    const asBob = scopedClient(bobSession.token)
-    const asAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    })
+    const A = aliceSession.jwt
+    const B = bobSession.jwt
 
-    // ── 1. the integration is actually on ────────────────────────────────
-    // This runs FIRST and everything after it is meaningless if it fails: a
-    // disabled integration makes every later assertion pass for the wrong
-    // reason, because empty results look like correct isolation.
-    console.log('\nIntegration is live (all later tests depend on this):')
+    // -- 1. the integration is actually on --------------------------------
+    // Runs FIRST, and everything after it is meaningless if it fails: a
+    // disabled integration makes every later assertion pass for the WRONG
+    // reason, because empty results look exactly like correct isolation.
+    console.log('\nIntegration is live (every later test depends on this):')
     {
-      const { data, error } = await asAlice.from('profiles').select('user_id, email')
-      const sawSelf = !error && (data ?? []).some((r) => r.user_id === alice.id)
+      const r = await rest('profiles?select=user_id,email', { token: A })
+      const sawSelf = Array.isArray(r.data) && r.data.some((x) => x.user_id === alice.id)
       check(
         'Alice can read her OWN profile through a Clerk JWT',
         sawSelf,
-        error
-          ? error.message
-          : 'Returned no rows. If the Clerk↔Supabase Third-Party Auth ' +
-            'integration is disabled, auth.jwt()->>\'sub\' is NULL and every ' +
-            'policy matches nothing — silently. Enable it in the Supabase ' +
-            'dashboard under Authentication → Third-Party Auth.',
+        !r.ok
+          ? `HTTP ${r.status}: ${JSON.stringify(r.data)}`
+          : "Returned no rows. If the Clerk<->Supabase Third-Party Auth integration is " +
+            "disabled, auth.jwt()->>'sub' is NULL and every policy matches nothing - " +
+            'silently. Enable it: Supabase dashboard -> Authentication -> Third-Party Auth.',
       )
     }
 
-    // ── 2. cross-user isolation ──────────────────────────────────────────
+    // -- 2. cross-user isolation ------------------------------------------
     console.log('\nCross-user isolation:')
     {
-      const { data } = await asBob.from('credit_ledger').select('id, user_id, amount')
-      const rows = data ?? []
-      check(
-        "Bob cannot read Alice's credit ledger",
-        !rows.some((r) => r.user_id === alice.id),
-        `saw ${rows.filter((r) => r.user_id === alice.id).length} of Alice's rows`,
-      )
+      const r = await rest('credit_ledger?select=id,user_id,amount', { token: B })
+      const rows = Array.isArray(r.data) ? r.data : []
+      const leaked = rows.filter((x) => x.user_id === alice.id)
+      check("Bob cannot read Alice's credit ledger", leaked.length === 0, `saw ${leaked.length} of her rows`)
       check('Bob sees no ledger rows at all (he has none)', rows.length === 0, `saw ${rows.length}`)
     }
     {
-      const { data } = await asBob.from('credit_balances').select('user_id, available_balance')
-      const rows = data ?? []
+      const r = await rest('credit_balances?select=user_id,available_balance', { token: B })
+      const rows = Array.isArray(r.data) ? r.data : []
       check(
         "Bob cannot read Alice's balance through the view",
-        !rows.some((r) => r.user_id === alice.id),
+        !rows.some((x) => x.user_id === alice.id),
         JSON.stringify(rows),
       )
     }
     {
-      const { data } = await asAlice.from('credit_balances').select('available_balance')
-      check(
-        'Alice CAN read her own balance, and it is 42',
-        Number(data?.[0]?.available_balance ?? 0) === 42,
-        `got ${JSON.stringify(data)}`,
-      )
+      const r = await rest('credit_balances?select=available_balance', { token: A })
+      const bal = Number(r.data?.[0]?.available_balance ?? 0)
+      check('Alice CAN read her own balance, and it is 42', bal === 42, `got ${JSON.stringify(r.data)}`)
     }
     {
-      const { data } = await asBob.from('profiles').select('user_id')
-      const rows = data ?? []
-      check(
-        "Bob cannot read Alice's profile",
-        !rows.some((r) => r.user_id === alice.id),
-        `saw ${rows.length} rows`,
-      )
+      const r = await rest('profiles?select=user_id', { token: B })
+      const rows = Array.isArray(r.data) ? r.data : []
+      check("Bob cannot read Alice's profile", !rows.some((x) => x.user_id === alice.id), `saw ${rows.length} rows`)
     }
 
-    // ── 3. anonymous access ──────────────────────────────────────────────
-    console.log('\nAnonymous access:')
-    for (const table of ['profiles', 'credit_ledger', 'user_roles']) {
-      const { data } = await asAnon.from(table).select('*').limit(5)
-      check(`anon reads nothing from ${table}`, (data ?? []).length === 0, `saw ${(data ?? []).length} rows`)
+    // -- 3. anonymous access ----------------------------------------------
+    console.log('\nAnonymous access (publishable key only, no user token):')
+    for (const table of ['profiles', 'credit_ledger', 'user_roles', 'audit_logs']) {
+      const r = await rest(`${table}?select=*&limit=5`, {})
+      const n = Array.isArray(r.data) ? r.data.length : 0
+      check(`anon reads nothing from ${table}`, n === 0, `saw ${n} rows`)
     }
 
-    // ── 4. privilege escalation ──────────────────────────────────────────
+    // -- 4. privilege escalation ------------------------------------------
     console.log('\nPrivilege escalation:')
     {
-      const { error } = await asBob
-        .from('user_roles')
-        .insert({ user_id: bob.id, role: 'administrator' })
-      check('Bob cannot grant himself the administrator role', Boolean(error), 'INSERT SUCCEEDED')
-    }
-    {
-      const { error } = await asBob
-        .from('credit_ledger')
-        .insert({ user_id: bob.id, amount: 1000, reason: 'promo', status: 'committed' })
-      check('Bob cannot write himself credits directly', Boolean(error), 'INSERT SUCCEEDED')
-    }
-    {
-      // The RPC functions all take a p_user_id. If EXECUTE was not revoked from
-      // `authenticated`, this call succeeds and anyone holding the publishable
-      // key — which ships in the browser bundle — can mint credits into any
-      // account. (CLAUDE.md trap #7)
-      const { error } = await asBob.rpc('grant_credits', {
-        p_user_id: bob.id,
-        p_amount: 9999,
-        p_reason: 'promo',
+      const r = await rest('user_roles', {
+        token: B,
+        method: 'POST',
+        body: { user_id: bob.id, role: 'administrator' },
       })
-      check('Bob cannot call grant_credits() over PostgREST', Boolean(error), 'RPC SUCCEEDED')
+      check('Bob cannot grant himself the administrator role', !r.ok, `HTTP ${r.status} - INSERT SUCCEEDED`)
     }
     {
-      const { error } = await asBob.rpc('reserve_credits', {
-        p_user_id: alice.id,
-        p_credit_type: 'watch',
-        p_amount: 1,
-        p_reason: 'watch_debit',
-        p_reference_type: 'video_unlock',
-        p_reference_id: 'x',
+      const r = await rest('credit_ledger', {
+        token: B,
+        method: 'POST',
+        body: { user_id: bob.id, amount: 1000, reason: 'promo', status: 'committed' },
       })
-      check("Bob cannot call reserve_credits() against Alice's account", Boolean(error), 'RPC SUCCEEDED')
+      check('Bob cannot write himself credits directly', !r.ok, `HTTP ${r.status} - INSERT SUCCEEDED`)
     }
     {
-      const { error } = await asBob
-        .from('profiles')
-        .update({ suspended_at: null, banned_at: null })
-        .eq('user_id', bob.id)
-      check('Bob cannot clear his own moderation flags', Boolean(error), 'UPDATE SUCCEEDED')
+      // Every credit function takes a p_user_id. If EXECUTE was not revoked
+      // from `authenticated`, this succeeds - and anyone holding the
+      // publishable key, which ships in the browser bundle, can mint credits
+      // into any account. (CLAUDE.md trap #7)
+      const r = await rest('rpc/grant_credits', {
+        token: B,
+        method: 'POST',
+        body: { p_user_id: bob.id, p_amount: 9999, p_reason: 'promo' },
+      })
+      check('Bob cannot call grant_credits() over PostgREST', !r.ok, `HTTP ${r.status} - RPC SUCCEEDED`)
     }
     {
-      const { error } = await asBob
-        .from('profiles')
-        .update({ display_name: 'Renamed' })
-        .eq('user_id', bob.id)
-      check('…but Bob CAN still edit his own display name', !error, error?.message)
+      const r = await rest('rpc/reserve_credits', {
+        token: B,
+        method: 'POST',
+        body: {
+          p_user_id: alice.id,
+          p_credit_type: 'watch',
+          p_amount: 1,
+          p_reason: 'watch_debit',
+          p_reference_type: 'video_unlock',
+          p_reference_id: 'x',
+        },
+      })
+      check("Bob cannot call reserve_credits() against Alice's account", !r.ok, `HTTP ${r.status} - RPC SUCCEEDED`)
+    }
+    {
+      const r = await rest(`profiles?user_id=eq.${bob.id}`, {
+        token: B,
+        method: 'PATCH',
+        body: { suspended_at: null, banned_at: null },
+      })
+      check('Bob cannot clear his own moderation flags', !r.ok, `HTTP ${r.status} - UPDATE SUCCEEDED`)
+    }
+    {
+      const r = await rest(`profiles?user_id=eq.${bob.id}`, {
+        token: B,
+        method: 'PATCH',
+        body: { display_name: 'Renamed' },
+      })
+      check('...but Bob CAN still edit his own display name', r.ok, `HTTP ${r.status}: ${JSON.stringify(r.data)}`)
+    }
+    {
+      const r = await rest(`profiles?user_id=eq.${alice.id}`, {
+        token: B,
+        method: 'PATCH',
+        body: { display_name: 'Hacked' },
+      })
+      const after = await svc(`profiles?user_id=eq.${alice.id}&select=display_name`)
+      const unchanged = after.data?.[0]?.display_name !== 'Hacked'
+      check("Bob cannot rename Alice (silently matches zero rows)", unchanged, 'Alice was renamed')
     }
   } finally {
-    console.log('\nCleaning up…')
+    console.log('\nCleaning up...')
     for (const s of [aliceSession, bobSession]) {
-      if (s) await clerk(`/sessions/${s.sessionId}/revoke`, { method: 'POST' }).catch(() => {})
+      if (s) await clerk(`/sessions/${s.id}/revoke`, { method: 'POST' }).catch(() => {})
     }
     for (const u of [alice, bob]) {
       if (!u) continue
-      await admin.from('credit_ledger').delete().eq('user_id', u.id).catch(() => {})
-      await admin.from('profiles').delete().eq('user_id', u.id).catch(() => {})
+      await svc(`credit_ledger?user_id=eq.${u.id}`, { method: 'DELETE' }).catch(() => {})
+      await svc(`notification_preferences?user_id=eq.${u.id}`, { method: 'DELETE' }).catch(() => {})
+      await svc(`profiles?user_id=eq.${u.id}`, { method: 'DELETE' }).catch(() => {})
       await clerk(`/users/${u.id}`, { method: 'DELETE' }).catch(() => {})
     }
   }
 
-  console.log(`\n${passed} passed, ${failed} failed\n`)
-  if (failed) {
+  console.log(`\n${passed} passed, ${failures.length} failed\n`)
+  if (failures.length) {
     console.log('Failures:')
     for (const f of failures) console.log(`  - ${f}`)
     console.log('\nPHASE 0 GATE: NOT PASSED. Do not build further until this is green.\n')

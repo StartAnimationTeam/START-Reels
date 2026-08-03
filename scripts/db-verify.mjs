@@ -1,0 +1,176 @@
+#!/usr/bin/env node
+/**
+ * Assert the applied schema is what the migrations claim.
+ *
+ * Not a substitute for scripts/test-rls.mjs — that proves isolation works at
+ * runtime with real tokens. This proves the structure exists at all: tables
+ * present, RLS switched on everywhere, no SECURITY DEFINER function left
+ * executable by a public role.
+ *
+ * The last check is the one that matters most. Postgres grants EXECUTE to
+ * PUBLIC on every function it creates, PostgREST exposes them all at
+ * /rest/v1/rpc/, and ours take a p_user_id. Miss a revoke and anyone holding
+ * the publishable key can move anyone's credits. (CLAUDE.md trap #7)
+ */
+
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+for (const line of readFileSync(join(ROOT, '.env'), 'utf8').split('\n')) {
+  const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
+  if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '')
+}
+
+const TOKEN = process.env.SUPABASE_ACCESS_TOKEN
+const REF = process.env.SUPABASE_PROJECT_REF
+
+async function sql(query) {
+  const res = await fetch(`https://api.supabase.com/v1/projects/${REF}/database/query`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  })
+  const text = await res.text()
+  if (!res.ok) throw new Error(JSON.parse(text).message ?? text)
+  return text ? JSON.parse(text) : []
+}
+
+let failed = 0
+function check(name, ok, detail = '') {
+  console.log(`  ${ok ? '\x1b[32mPASS\x1b[0m' : '\x1b[31mFAIL\x1b[0m'}  ${name}${!ok && detail ? `\n        ${detail}` : ''}`)
+  if (!ok) failed++
+}
+
+console.log('\nSchema verification\n')
+
+// ── tables present, RLS on ────────────────────────────────────────────────
+const EXPECTED = [
+  'profiles', 'user_roles', 'user_role_audit', 'creator_applications',
+  'notification_preferences', 'credit_ledger', 'platform_settings',
+  'audit_logs', 'processed_webhook_events',
+]
+
+const tables = await sql(`
+  select relname as name, relrowsecurity as rls
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'r'
+`)
+const byName = new Map(tables.map((t) => [t.name, t]))
+
+console.log('Tables:')
+for (const t of EXPECTED) {
+  check(`${t} exists`, byName.has(t))
+}
+
+console.log('\nRLS enabled on every table:')
+// No exclusions. Every table in the public schema is reachable through
+// PostgREST, so "this one doesn't matter" is never true.
+const noRls = tables.filter((t) => !t.rls).map((t) => t.name)
+check('no table has RLS off', noRls.length === 0, `off for: ${noRls.join(', ')}`)
+
+// ── the important one ─────────────────────────────────────────────────────
+console.log('\nSECURITY DEFINER functions are not publicly executable:')
+const leaky = await sql(`
+  select p.proname as name,
+         array_to_string(array(
+           select r.rolname from pg_roles r
+           where has_function_privilege(r.rolname, p.oid, 'EXECUTE')
+             and r.rolname in ('anon','authenticated','public')
+         ), ', ') as roles
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.prosecdef
+    and pg_get_function_identity_arguments(p.oid) ilike '%p_user_id%'
+`)
+const exposed = leaky.filter((f) => f.roles)
+check(
+  'no user-id-taking definer function is callable by anon/authenticated',
+  exposed.length === 0,
+  exposed.map((f) => `${f.name} -> ${f.roles}`).join('; '),
+)
+
+// ── views must not bypass RLS ─────────────────────────────────────────────
+// A view runs as its OWNER unless security_invoker is set, so a view over an
+// RLS-protected table silently exposes every row. This is how credit_balances
+// leaked every user's balance until 0004. Checked for ALL views so a new one
+// cannot reintroduce it.
+console.log('\nViews run as the caller (security_invoker):')
+const views = await sql(`
+  select c.relname as name,
+         coalesce(
+           (select option_value from pg_options_to_table(c.reloptions)
+            where option_name = 'security_invoker'),
+           'off'
+         ) as invoker
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'v'
+`)
+for (const v of views) {
+  check(`${v.name} has security_invoker on`, v.invoker === 'true' || v.invoker === 'on', `is '${v.invoker}'`)
+}
+if (views.length === 0) check('at least one view exists to check', false, 'no views found')
+
+// ── audit log is append-only ──────────────────────────────────────────────
+console.log('\nAudit log is append-only:')
+const auditWriters = await sql(`
+  select array_to_string(array(
+    select r.rolname from pg_roles r
+    where (has_table_privilege(r.rolname, 'public.audit_logs', 'UPDATE')
+        or has_table_privilege(r.rolname, 'public.audit_logs', 'DELETE'))
+      and r.rolname in ('anon','authenticated','service_role')
+  ), ', ') as roles
+`)
+check(
+  'UPDATE/DELETE revoked from anon, authenticated and service_role',
+  !auditWriters[0]?.roles,
+  `still held by: ${auditWriters[0]?.roles}`,
+)
+
+// ── settings seeded ───────────────────────────────────────────────────────
+console.log('\nPlatform settings:')
+const settings = await sql(`select count(*)::int as n from public.platform_settings`)
+check('settings seeded', settings[0].n >= 12, `found ${settings[0].n}`)
+
+const window = await sql(`
+  select value #>> '{}' as v from public.platform_settings where key = 'entitlement_window_hours'
+`)
+check('entitlement window is 48h', window[0]?.v === '48', `got ${window[0]?.v}`)
+
+// ── ledger round trip ─────────────────────────────────────────────────────
+console.log('\nLedger behaviour:')
+const probe = 'verify_probe_user'
+await sql(`delete from public.credit_ledger where user_id = '${probe}'`)
+
+await sql(`select public.grant_credits('${probe}', 10, 'admin_grant', null, null, 'watch', 'verify:1', '{}'::jsonb)`)
+await sql(`select public.grant_credits('${probe}', 10, 'admin_grant', null, null, 'watch', 'verify:1', '{}'::jsonb)`)
+const afterDouble = await sql(`select public.available_credits('${probe}', 'watch') as bal`)
+check(
+  'a replayed grant with the same idempotency key does not double',
+  Number(afterDouble[0].bal) === 10,
+  `balance is ${afterDouble[0].bal}, expected 10`,
+)
+
+const hold = await sql(`
+  select public.reserve_credits('${probe}', 'watch', 3, 'watch_debit', 'video_unlock', 'probe') as id
+`)
+const held = await sql(`select public.available_credits('${probe}', 'watch') as bal`)
+check('a hold immediately reduces available balance', Number(held[0].bal) === 7, `got ${held[0].bal}`)
+
+await sql(`select public.settle_credit_hold('${hold[0].id}', false)`)
+const reversed = await sql(`select public.available_credits('${probe}', 'watch') as bal`)
+check('reversing a hold restores the balance', Number(reversed[0].bal) === 10, `got ${reversed[0].bal}`)
+
+let overspendBlocked = false
+try {
+  await sql(`select public.reserve_credits('${probe}', 'watch', 999, 'watch_debit', 'video_unlock', 'probe')`)
+} catch (err) {
+  overspendBlocked = err.message.includes('insufficient_credits')
+}
+check('overspending raises insufficient_credits', overspendBlocked)
+
+await sql(`delete from public.credit_ledger where user_id = '${probe}'`)
+
+console.log(failed === 0 ? '\nSchema OK.\n' : `\n${failed} check(s) failed.\n`)
+process.exit(failed === 0 ? 0 : 1)

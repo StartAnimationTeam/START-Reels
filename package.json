@@ -16,9 +16,9 @@
     "check:fn": "deno check supabase/functions/**/*.ts"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.111.0"
+    "@supabase/supabase-js": "2.111.0"
   },
   "devDependencies": {
-    "supabase": "^2.0.0"
+    "supabase": "2.111.0"
   }
 }

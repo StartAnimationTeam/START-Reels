@@ -66,7 +66,7 @@ can read, reason about and typecheck the code.
 
 | Phase | | |
 |---|---|---|
-| **0** | Foundations — auth, identity + ledger schema, RLS, webhook | **in progress** |
+| **0** | Foundations — auth, identity + ledger schema, RLS, webhook | **schema applied, RLS gate green; awaiting `CLERK_WEBHOOK_SECRET`** |
 | 1 | Ingest & catalogue — Bunny upload, transcode, thumbnails | not started |
 | 2 | Playback & credits — entitlements, signed URLs, heartbeats | not started |
 | 3 | Browse — search, rails, recommendations, favorites | not started |
