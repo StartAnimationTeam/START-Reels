@@ -61,5 +61,11 @@ export function useAdminApi() {
 
     user: (action: string, userId: string, extra: Record<string, unknown> = {}) =>
       call<{ ok: true }>('admin-users', { action, userId, ...extra }),
+
+    moderation: (action: string, extra: Record<string, unknown> = {}) =>
+      call<{ ok: true }>('moderation', { action, ...extra }),
+
+    platform: (action: string, extra: Record<string, unknown> = {}) =>
+      call<{ ok: true; campaign?: { id: string; code: string } }>('admin-platform', { action, ...extra }),
   }
 }

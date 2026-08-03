@@ -52,3 +52,9 @@ verify_jwt = false
 
 [functions.admin-users]
 verify_jwt = false
+
+[functions.moderation]
+verify_jwt = false
+
+[functions.admin-platform]
+verify_jwt = false

@@ -1,6 +1,7 @@
 import { AuthError, requireUser } from '../_shared/auth.ts'
 import { fail, handlePreflight, json } from '../_shared/cors.ts'
 import { serviceClient } from '../_shared/db.ts'
+import { maintenanceBlocks } from '../_shared/maintenance.ts'
 
 /**
  * POST { videoId } → unlock (or return the existing entitlement).
@@ -35,6 +36,11 @@ Deno.serve(async (req) => {
   }
 
   const db = serviceClient()
+
+  if (await maintenanceBlocks(db, userId)) {
+    return fail(req, 'maintenance_mode', 503)
+  }
+
   const { data, error } = await db.rpc('unlock_video', {
     p_user_id: userId,
     p_video_id: videoId,

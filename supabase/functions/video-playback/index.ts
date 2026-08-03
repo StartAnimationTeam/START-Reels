@@ -2,6 +2,7 @@ import { AuthError, ipHash, requireUser } from '../_shared/auth.ts'
 import { isConfigured, signPlaybackUrl } from '../_shared/bunny.ts'
 import { fail, handlePreflight, json } from '../_shared/cors.ts'
 import { serviceClient } from '../_shared/db.ts'
+import { maintenanceBlocks } from '../_shared/maintenance.ts'
 
 /**
  * POST { videoId } → { url, sessionId, expires }
@@ -48,6 +49,10 @@ Deno.serve(async (req) => {
   }
 
   const db = serviceClient()
+
+  if (await maintenanceBlocks(db, userId)) {
+    return fail(req, 'maintenance_mode', 503)
+  }
 
   // 1. Live entitlement, or 402. The client turns needs_unlock into the
   //    unlock gate — this response is the paywall speaking.

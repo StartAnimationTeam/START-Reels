@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
 import { FavoriteButton } from '@/components/FavoriteButton'
+import { ReportButton } from '@/components/ReportButton'
 import { currentUser } from '@/lib/auth'
 import { isFavorited } from '@/lib/catalog'
 import { createAnonSupabase, createServerSupabase } from '@/lib/supabase-server'
@@ -89,6 +90,11 @@ export default async function WatchPage({ params }: Props) {
         </p>
         {video.description && (
           <p className="mt-4 max-w-3xl whitespace-pre-line text-ink-secondary">{video.description}</p>
+        )}
+        {userId && (
+          <div className="mt-6">
+            <ReportButton videoId={video.id} />
+          </div>
         )}
       </div>
     </div>

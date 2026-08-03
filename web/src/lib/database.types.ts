@@ -149,6 +149,82 @@ export interface Database {
         Update: never
         Relationships: []
       }
+      video_reports: {
+        Row: {
+          id: string
+          reporter_id: string
+          video_id: string
+          reason: 'inappropriate' | 'copyright' | 'spam' | 'wrong_metadata' | 'other'
+          detail: string | null
+          status: 'open' | 'reviewing' | 'actioned' | 'dismissed'
+          reviewed_by: string | null
+          reviewed_at: string | null
+          action_taken: string | null
+          created_at: string
+        }
+        Insert: {
+          reporter_id: string
+          video_id: string
+          reason: 'inappropriate' | 'copyright' | 'spam' | 'wrong_metadata' | 'other'
+          detail?: string | null
+        }
+        Update: never
+        Relationships: []
+      }
+      user_warnings: {
+        Row: {
+          id: string
+          user_id: string
+          issued_by: string
+          severity: 'notice' | 'warning' | 'final'
+          reason: string
+          related_report_id: string | null
+          acknowledged_at: string | null
+          created_at: string
+        }
+        Insert: never
+        Update: { acknowledged_at?: string }
+        Relationships: []
+      }
+      promo_campaigns: {
+        Row: {
+          id: string
+          code: string
+          name: string
+          amount: number
+          starts_at: string
+          ends_at: string | null
+          max_redemptions: number | null
+          per_user_limit: number
+          is_active: boolean
+          created_by: string | null
+          created_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      promo_redemptions: {
+        Row: { campaign_id: string; user_id: string; ledger_id: string; redeemed_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      audit_logs: {
+        Row: {
+          id: number
+          actor_id: string | null
+          action: string
+          target_type: string | null
+          target_id: string | null
+          before: Json | null
+          after: Json | null
+          created_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       profiles: {
         Row: {
           user_id: string
