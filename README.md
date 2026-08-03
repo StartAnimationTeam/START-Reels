@@ -70,7 +70,7 @@ can read, reason about and typecheck the code.
 | 1 | Ingest & catalogue â€” Bunny upload, transcode, thumbnails | **done** â€” real clip through the real pipeline, 18/18 (`test-ingest-live`); token auth verified down to the segment level |
 | 2 | Playback & credits â€” entitlements, signed URLs, heartbeats | **done** â€” 74 checks green (entitlements 29, watch-time 25, HTTP paywall 20) plus the loop-closer: a real unlock returns a URL that actually streams |
 | 3 | Browse - search, rails, recommendations, favorites | **done** - FTS + prefix fallback, SQL recommender, scroll-snap rails, optimistic favorites |
-| 4 | Profile & wallet | not started |
+| 4 | Profile & wallet | **done** - daily rewards (raced-claim safe), promo codes (no-oracle errors), history with resume, settings + avatars |
 | 5 | Creator flow | not started |
 | 6 | Admin & moderation | **first pass done** - upload UI, video + user management, audited; reports/promos/settings next |
 | 7 | Analytics | not started |
