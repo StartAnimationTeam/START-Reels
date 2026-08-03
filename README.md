@@ -108,6 +108,39 @@ The credential-free suites (`test-credits`, `test-entitlements`,
 numbers don't collide and that no `SECURITY DEFINER` function was left
 world-executable.
 
+## Launch runbook (the owner's checklist)
+
+Everything below needs account access only the owner has. The code side is
+done; each item unlocks one production property.
+
+1. **Vercel (takes the app off localhost).** vercel.com → Add New Project →
+   import `StartAnimationTeam/START-Reels`, root directory `web/`. **Pro
+   plan** (Hobby blocks git deploys when the commit author isn't the account
+   owner). Add the env vars from `web/.env.local.example` with real values.
+   After the first deploy, set `ALLOWED_ORIGIN` in the Supabase function
+   secrets to the production URL (`supabase secrets set ALLOWED_ORIGIN=https://…`)
+   — never `*` — and add the domain to Clerk (production instance) and to
+   Bunny's allowed referrers.
+2. **CI secrets (makes the build job green).** GitHub repo → Settings →
+   Secrets and variables → Actions: `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`,
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (publishable
+   values; secrecy isn't the point, rotation-in-one-place is).
+3. **Clerk production instance.** The `pk_test_`/`sk_test_` keys are the dev
+   instance. Before real users: create the production instance (Clerk
+   dashboard), re-run the Phase 0 dashboard config on it (email+password,
+   verification, bot protection, Supabase third-party auth), point the
+   webhook at the same function URL, and swap the four Clerk values.
+4. **Bunny payment method** before the trial's 14 days lapse, or all video
+   serving stops. Set a billing alert (~$10/mo) at the same time.
+5. **Sentry** (error visibility — optional, recommended):
+   `npx @sentry/wizard@latest -i nextjs` in `web/` with a free-tier DSN.
+6. **Resend** (product email — optional until notifications matter): API key
+   plus SPF/DKIM DNS records on the sending domain; DNS propagation is the
+   slow part, start early.
+7. **Upstash** (only at real scale): the rate limiter is Postgres-based by
+   design and right-sized for thousands of users; swap the `check_rate_limit`
+   call sites to Upstash when the counter table itself becomes hot.
+
 ## Where to read next
 
 | | |

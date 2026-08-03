@@ -137,17 +137,18 @@ try {
       `HTTP ${redeem.status}: ${JSON.stringify(redeem.data)}`)
     h.check('balance +7', (await bal(alice.id)) === base + 7)
 
+    // Promo failures arrive as {error} data, not raises — see migration 0015:
+    // a raise would roll back the guessing-limit counter with it.
     const again = await rpc('redeem_promo', alice.jwt, { p_code: 'WALLET-TEST-OPEN' })
     h.check('per-user limit refuses a second redemption',
-      again.status !== 200 && JSON.stringify(again.data).includes('promo_already_redeemed'),
+      again.data?.error === 'promo_already_redeemed',
       `HTTP ${again.status}: ${JSON.stringify(again.data)}`)
     h.check('balance unchanged', (await bal(alice.id)) === base + 7)
 
     const unknown = await rpc('redeem_promo', alice.jwt, { p_code: 'WALLET-TEST-NOPE' })
     const inactive = await rpc('redeem_promo', alice.jwt, { p_code: 'WALLET-TEST-OFF' })
     h.check('unknown and inactive codes fail with the SAME error (no oracle)',
-      JSON.stringify(unknown.data).includes('promo_invalid') &&
-      JSON.stringify(inactive.data).includes('promo_invalid'),
+      unknown.data?.error === 'promo_invalid' && inactive.data?.error === 'promo_invalid',
       `${JSON.stringify(unknown.data)} vs ${JSON.stringify(inactive.data)}`)
 
     // Bob takes redemption #2 of 2; the campaign is now exhausted for everyone.
@@ -160,17 +161,13 @@ try {
     `)
     // A third redemption must hit max_redemptions — checked via SQL as a
     // synthetic user since minting a third Clerk user buys nothing extra.
+    // The function returns {error} data now rather than raising.
     const exhausted = await sql(`
-      do $$ begin
-        perform set_config('request.jwt.claims', '{"sub":"wallet_third","role":"authenticated"}', true);
-        perform public.redeem_promo('WALLET-TEST-OPEN');
-        raise exception 'should_not_reach';
-      exception when others then
-        if sqlerrm not like '%promo_exhausted%' then raise; end if;
-      end $$;
-      select 'ok' as result;
-    `).then((r) => r[0]?.result === 'ok').catch(() => false)
-    h.check('max_redemptions caps the campaign globally', exhausted)
+      select set_config('request.jwt.claims', '{"sub":"wallet_third","role":"authenticated"}', true);
+      select public.redeem_promo('WALLET-TEST-OPEN') as r;
+    `)
+    h.check('max_redemptions caps the campaign globally',
+      exhausted[0]?.r?.error === 'promo_exhausted', JSON.stringify(exhausted))
     await sql(`delete from public.profiles where user_id = 'wallet_third'`)
   }
 

@@ -47,8 +47,12 @@ export function WalletActions({
     setBusy(true)
     setMessage(null)
     const { data, error } = await supabase.rpc('redeem_promo', { p_code: code.trim() })
-    if (error) {
-      setMessage({ ok: false, text: errorLabel(error.message) })
+    // Failures arrive as DATA ({error: code}), not thrown: the function must
+    // not raise on a bad guess or the transaction rollback would erase its
+    // own rate-limit counter (see migration 0015).
+    const failCode = error?.message ?? (data as { error?: string } | null)?.error
+    if (failCode) {
+      setMessage({ ok: false, text: errorLabel(failCode) })
     } else {
       setMessage({ ok: true, text: `“${data?.name}” added ${creditLabel(Number(data?.granted ?? 0))}.` })
       setCode('')

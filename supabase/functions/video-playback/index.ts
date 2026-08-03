@@ -50,6 +50,16 @@ Deno.serve(async (req) => {
 
   const db = serviceClient()
 
+  // The hottest abusable endpoint: every call mints a signed URL. 30/min per
+  // user is far above any legitimate player (one mint per play + expiry
+  // refreshes) and far below a token-farming loop.
+  const { data: allowed } = await db.rpc('check_rate_limit', {
+    p_key: `playback:${userId}`,
+    p_limit: 30,
+    p_window_seconds: 60,
+  })
+  if (allowed === false) return fail(req, 'rate_limited', 429)
+
   if (await maintenanceBlocks(db, userId)) {
     return fail(req, 'maintenance_mode', 503)
   }

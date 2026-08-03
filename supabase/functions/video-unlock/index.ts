@@ -37,6 +37,15 @@ Deno.serve(async (req) => {
 
   const db = serviceClient()
 
+  // 20 unlocks/min per user: generous for humans (idempotent re-unlocks are
+  // cheap and common), hostile to scripted entitlement farming.
+  const { data: allowed } = await db.rpc('check_rate_limit', {
+    p_key: `unlock:${userId}`,
+    p_limit: 20,
+    p_window_seconds: 60,
+  })
+  if (allowed === false) return fail(req, 'rate_limited', 429)
+
   if (await maintenanceBlocks(db, userId)) {
     return fail(req, 'maintenance_mode', 503)
   }

@@ -186,15 +186,18 @@ try {
     h.check('duplicate code -> 409', taken.status === 409, `HTTP ${taken.status}`)
 
     const redeem = await rest('rpc/redeem_promo', reporter.jwt, { method: 'POST', body: { p_code: 'MODTEST-5' } })
-    h.check('the new code redeems', redeem.ok, `HTTP ${redeem.status}: ${JSON.stringify(redeem.data)}`)
+    h.check('the new code redeems', redeem.ok && redeem.data?.granted === 5,
+      `HTTP ${redeem.status}: ${JSON.stringify(redeem.data)}`)
 
     const off = await fn('admin-platform', admin.jwt, { action: 'set_promo_active', campaignId, active: false })
     h.check('admin deactivates it', off.status === 200, `HTTP ${off.status}`)
 
+    // Promo failures are {error} data since 0015 (raises would roll back the
+    // guessing counter).
     const redeemOff = await rest('rpc/redeem_promo', uploader.jwt, { method: 'POST', body: { p_code: 'MODTEST-5' } })
     h.check('a deactivated code refuses with the generic error',
-      !redeemOff.ok && JSON.stringify(redeemOff.data).includes('promo_invalid'),
-      `HTTP ${redeemOff.status}`)
+      redeemOff.data?.error === 'promo_invalid',
+      `HTTP ${redeemOff.status}: ${JSON.stringify(redeemOff.data)}`)
   }
 
   h.section('Settings allowlist')
