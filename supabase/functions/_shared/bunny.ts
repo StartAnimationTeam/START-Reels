@@ -86,12 +86,22 @@ export async function createDirectUpload(title: string): Promise<{
 /**
  * Sign an HLS playback URL for one video, expiring after `ttlSeconds`.
  *
- * Bunny embedded token authentication, path-scoped: the token covers
- * `/{guid}/` as a PREFIX, so the same token authorizes the playlist AND every
- * segment under it. Signing only the manifest would leave the segments openly
- * fetchable — the exact hole that makes a paywall decorative (trap #2).
+ * Path-scoped: the token covers `/{guid}/` as a PREFIX, so one token
+ * authorizes the playlist AND every segment under it. Signing only the
+ * manifest would leave the segments openly fetchable — the exact hole that
+ * makes a paywall decorative (trap #2).
  *
- * token = base64url( sha256_raw( token_key + path + expires ) )
+ * Modern Bunny scheme (per BunnyWay/BunnyCDN.TokenAuthentication):
+ *   token = "HS256-" + base64url( HMAC_SHA256( key,
+ *             signaturePath + expires + ipBytes + signingData ) )
+ * with signingData = sorted "k=v" params joined by "&" (raw values), and
+ * ipBytes empty when not IP-locking (we don't — mobile clients change IP
+ * mid-stream, plan §2).
+ *
+ * STATUS: pending live verification. The library currently has "Block direct
+ * URL file access" enabled, which 403s every vz-* URL unconditionally — no
+ * signature can succeed until that setting is flipped and CDN token auth is
+ * enabled. scripts/test-ingest-live.mjs proves whichever scheme is live.
  */
 export async function signPlaybackUrl(
   guid: string,
@@ -99,18 +109,29 @@ export async function signPlaybackUrl(
 ): Promise<{ url: string; expires: number }> {
   const expires = Math.floor(Date.now() / 1000) + ttlSeconds
   const path = `/${guid}/`
+  const signingData = `token_path=${path}`
 
-  const digest = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(`${TOKEN_KEY}${path}${expires}`),
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(TOKEN_KEY!),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
   )
-  const token = btoa(String.fromCharCode(...new Uint8Array(digest)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
+  const mac = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(`${path}${expires}${signingData}`),
+  )
+  const token =
+    'HS256-' +
+    btoa(String.fromCharCode(...new Uint8Array(mac)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
 
   return {
-    url: `https://${CDN_HOSTNAME}/${guid}/playlist.m3u8?token=${token}&expires=${expires}&token_path=${encodeURIComponent(path)}`,
+    url: `https://${CDN_HOSTNAME}/${guid}/playlist.m3u8?token=${token}&token_path=${encodeURIComponent(path)}&expires=${expires}`,
     expires,
   }
 }

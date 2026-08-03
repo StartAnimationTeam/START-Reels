@@ -40,3 +40,9 @@ verify_jwt = false
 
 [functions.credits-sweep]
 verify_jwt = false
+
+[functions.video-upload]
+verify_jwt = false
+
+[functions.bunny-webhook]
+verify_jwt = false
