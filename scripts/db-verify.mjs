@@ -37,6 +37,16 @@ async function sql(query) {
   return text ? JSON.parse(text) : []
 }
 
+/** Returns the error message (or null on success) instead of throwing. */
+async function sqlError(query) {
+  try {
+    await sql(query)
+    return null
+  } catch (err) {
+    return err.message
+  }
+}
+
 let failed = 0
 function check(name, ok, detail = '') {
   console.log(`  ${ok ? '\x1b[32mPASS\x1b[0m' : '\x1b[31mFAIL\x1b[0m'}  ${name}${!ok && detail ? `\n        ${detail}` : ''}`)
@@ -50,6 +60,9 @@ const EXPECTED = [
   'profiles', 'user_roles', 'user_role_audit', 'creator_applications',
   'notification_preferences', 'credit_ledger', 'platform_settings',
   'audit_logs', 'processed_webhook_events',
+  // Phase 2
+  'videos', 'categories', 'video_categories', 'tags', 'video_tags',
+  'upload_sessions', 'video_entitlements', 'watch_sessions', 'watch_history',
 ]
 
 const tables = await sql(`
@@ -127,6 +140,43 @@ check(
   !auditWriters[0]?.roles,
   `still held by: ${auditWriters[0]?.roles}`,
 )
+
+// ── the GUID column grant ─────────────────────────────────────────────────
+// provider_asset_id is the thing signed URLs exist to protect. RLS hides
+// rows; only a COLUMN grant hides a column — assert clients cannot select it.
+console.log('\nprovider_asset_id is not client-selectable:')
+const colGrant = await sql(`
+  select array_to_string(array(
+    select grantee from information_schema.column_privileges
+    where table_schema = 'public' and table_name = 'videos'
+      and column_name = 'provider_asset_id'
+      and privilege_type = 'SELECT'
+      and grantee in ('anon', 'authenticated')
+  ), ', ') as grantees
+`)
+check(
+  'neither anon nor authenticated can SELECT videos.provider_asset_id',
+  !colGrant[0]?.grantees,
+  `granted to: ${colGrant[0]?.grantees}`,
+)
+
+// ── the tier<->cost invariant ─────────────────────────────────────────────
+console.log('\nTier<->cost CHECK constraint:')
+const badTier = await sqlError(`
+  insert into public.videos (title, slug, creator_id, access_tier, credit_cost)
+  values ('bad', 'db-verify-bad-tier', 'db_verify', 'free', 3)
+`)
+check('a free video with a nonzero cost is refused', Boolean(badTier), 'INSERT SUCCEEDED')
+await sql(`delete from public.videos where slug = 'db-verify-bad-tier'`)
+
+// ── pg_cron sweep scheduled ───────────────────────────────────────────────
+console.log('\nNightly sweep:')
+try {
+  const jobs = await sql(`select jobname from cron.job where jobname = 'sweep-stale-holds'`)
+  check('sweep-stale-holds is scheduled in pg_cron', jobs.length === 1)
+} catch {
+  check('sweep-stale-holds is scheduled in pg_cron', false, 'pg_cron schema missing')
+}
 
 // ── settings seeded ───────────────────────────────────────────────────────
 console.log('\nPlatform settings:')

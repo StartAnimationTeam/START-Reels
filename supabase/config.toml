@@ -28,3 +28,15 @@ major_version = 15
 
 [functions.clerk-webhook]
 verify_jwt = false
+
+[functions.video-unlock]
+verify_jwt = false
+
+[functions.video-playback]
+verify_jwt = false
+
+[functions.watch-heartbeat]
+verify_jwt = false
+
+[functions.credits-sweep]
+verify_jwt = false

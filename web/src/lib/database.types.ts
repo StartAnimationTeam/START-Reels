@@ -32,9 +32,103 @@ export type LedgerReason =
 
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[]
 
+export type VideoStatus =
+  | 'draft'
+  | 'uploading'
+  | 'processing'
+  | 'pending_review'
+  | 'published'
+  | 'rejected'
+  | 'removed'
+export type AccessTier = 'free' | 'premium' | 'exclusive'
+export type EntitlementSource =
+  | 'purchase'
+  | 'free_tier'
+  | 'creator_own'
+  | 'role_bypass'
+  | 'promo'
+  | 'admin_grant'
+
 export interface Database {
   public: {
     Tables: {
+      // NOTE: provider_asset_id and search_tsv are deliberately absent from
+      // this Row type. The column grant in 0005 makes them unselectable by
+      // clients — the type mirrors what the database will actually return.
+      videos: {
+        Row: {
+          id: string
+          title: string
+          slug: string
+          description: string | null
+          creator_id: string
+          status: VideoStatus
+          access_tier: AccessTier
+          credit_cost: number
+          provider: string
+          duration_seconds: number | null
+          thumbnail_url: string | null
+          preview_gif_url: string | null
+          is_featured: boolean
+          featured_rank: number | null
+          view_count: number
+          total_watch_seconds: number
+          rejection_reason: string | null
+          published_at: string | null
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      video_entitlements: {
+        Row: {
+          id: string
+          user_id: string
+          video_id: string
+          source: EntitlementSource
+          credits_charged: number
+          ledger_id: string | null
+          granted_at: string
+          expires_at: string
+          revoked_at: string | null
+          revoke_reason: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      watch_history: {
+        Row: {
+          user_id: string
+          video_id: string
+          last_position_seconds: number
+          total_seconds_watched: number
+          watch_count: number
+          completed: boolean
+          first_watched_at: string
+          last_watched_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      categories: {
+        Row: {
+          id: string
+          slug: string
+          name: string
+          description: string | null
+          sort_order: number
+          is_active: boolean
+          created_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       profiles: {
         Row: {
           user_id: string
