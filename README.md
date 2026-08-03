@@ -67,8 +67,8 @@ can read, reason about and typecheck the code.
 | Phase | | |
 |---|---|---|
 | **0** | Foundations — auth, identity + ledger schema, RLS, webhook | **done** — 40/40 checks green against the live project |
-| 1 | Ingest & catalogue — Bunny upload, transcode, thumbnails | **blocked on Bunny credentials** — `_shared/bunny.ts` is written; everything 503s `bunny_not_configured` until keys arrive |
-| 2 | Playback & credits — entitlements, signed URLs, heartbeats | **done** — 74 checks green (entitlements 29, watch-time 25, HTTP paywall 20); only URL-signing itself awaits Bunny |
+| 1 | Ingest & catalogue — Bunny upload, transcode, thumbnails | **done** — real clip through the real pipeline, 18/18 (`test-ingest-live`); token auth verified down to the segment level |
+| 2 | Playback & credits — entitlements, signed URLs, heartbeats | **done** — 74 checks green (entitlements 29, watch-time 25, HTTP paywall 20) plus the loop-closer: a real unlock returns a URL that actually streams |
 | 3 | Browse — search, rails, recommendations, favorites | not started |
 | 4 | Profile & wallet | not started |
 | 5 | Creator flow | not started |
