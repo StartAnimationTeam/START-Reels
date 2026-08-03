@@ -1,34 +1,34 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { clerkMiddleware } from '@clerk/nextjs/server'
 
 /**
- * Clerk auth guard.
+ * Clerk session context. Deliberately does NOT guard routes.
  *
- * This file is `proxy.ts`, NOT `middleware.ts` — Next.js 16 renamed the
- * convention and silently ignores the old filename. Clerk 7.6+ knows about the
- * rename (`isNext16OrHigher ? ['middleware', 'proxy']`), so `clerkMiddleware`
- * is still the right export to call from it.
+ * ── Why there is no route matcher here ─────────────────────────────────────
+ * Clerk deprecated `createRouteMatcher` for a reason worth repeating: proxy
+ * path matching can diverge from how Next.js actually routes a request, so a
+ * protected resource can stay reachable while the matcher looks correct.
+ * Authorization belongs next to the data it protects, not in a path pattern
+ * two layers away.
  *
- * Default posture is PUBLIC. This is a video library with public signup: the
- * catalog has to be browsable by a logged-out visitor or there is nothing to
- * sign up for. Playback is not gated here — it is gated by the entitlement
- * check inside the `video-playback` Edge Function, because a route guard
- * cannot know whether someone has paid.
+ * So this file only establishes the session. Every protected surface calls
+ * `requireUser()` or `requireRole()` from `@/lib/auth` itself. That is also the
+ * only way role checks can work at all here — a Clerk session token says who
+ * you are, and `user_roles` says what you may do.
+ *
+ * ── Why the file is named proxy.ts ─────────────────────────────────────────
+ * Next.js 16 renamed the `middleware.ts` convention to `proxy.ts` and silently
+ * ignores the old filename.
+ *
+ * ── Why the export is named, not default ───────────────────────────────────
+ * Next 16 resolves the Node-runtime proxy as:
+ *     adapterFn = module.default || module
+ *     adapterFn({ handler: module.proxy || module.middleware || module, ... })
+ * `default` is expected to be Next's own ADAPTER; the handler is expected at
+ * `proxy`. Default-exporting the handler makes every request fail with
+ * "TypeError: adapterFn is not a function" — while `next build` still succeeds
+ * and prints "ƒ Proxy (Middleware)", so nothing warns you.
  */
-
-const isProtectedRoute = createRouteMatcher([
-  '/me(.*)',
-  '/creator(.*)',
-  '/admin(.*)',
-])
-
-export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
-    // Redirects anonymous visitors to /sign-in. Role checks are NOT done here:
-    // /admin and /creator verify roles server-side against `user_roles`, since
-    // a Clerk session token says who you are, not what you may do.
-    await auth.protect()
-  }
-})
+export const proxy = clerkMiddleware()
 
 export const config = {
   matcher: [
