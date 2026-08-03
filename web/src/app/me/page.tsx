@@ -111,6 +111,7 @@ export default async function ProfilePage() {
           { href: '/me/history', label: 'Watch history' },
           { href: '/me/favorites', label: 'My list' },
           { href: '/me/settings', label: 'Settings' },
+          { href: '/creator', label: 'Creator studio' },
         ].map((item) => (
           <Link
             key={item.href}

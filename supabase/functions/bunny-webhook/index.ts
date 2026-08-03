@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     // upload from the dashboard, or a forged body naming a random GUID.
     const { data: row } = await db
       .from('videos')
-      .select('id, status')
+      .select('id, status, creator_id')
       .eq('provider_asset_id', guid)
       .maybeSingle()
 
@@ -137,12 +137,28 @@ Deno.serve(async (req) => {
         duration_seconds: Math.round(video.length ?? 0),
         ...(thumb ? { thumbnail_url: thumb } : {}),
       }
-      // Only lift TO published from the transcoding states. A video an admin
-      // rejected or removed must not silently re-publish because Bunny
-      // re-encoded a rendition.
+      // Only lift OUT of the transcoding states. A video an admin rejected or
+      // removed must not silently re-publish because Bunny re-encoded.
+      //
+      // Where it lands depends on WHO uploaded: staff uploads are trusted and
+      // publish immediately; a creator's upload goes to pending_review for
+      // the moderation queue. Checked here — at encode-complete — because
+      // roles can change between upload and encode, and the decision should
+      // reflect who they are when the video becomes real.
       if (row.status === 'processing' || row.status === 'uploading') {
-        patch.status = 'published'
-        patch.published_at = new Date().toISOString()
+        const { data: uploaderRoles } = await db
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', row.creator_id)
+        const isStaff = (uploaderRoles ?? []).some(
+          (r: { role: string }) => r.role === 'moderator' || r.role === 'administrator',
+        )
+        if (isStaff) {
+          patch.status = 'published'
+          patch.published_at = new Date().toISOString()
+        } else {
+          patch.status = 'pending_review'
+        }
       }
       await db.from('videos').update(patch).eq('id', row.id)
       await db

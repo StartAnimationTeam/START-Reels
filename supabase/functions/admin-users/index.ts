@@ -32,6 +32,8 @@ interface Body {
   until?: string
   amount?: number
   note?: string
+  applicationId?: string
+  approve?: boolean
 }
 
 Deno.serve(async (req) => {
@@ -54,6 +56,53 @@ Deno.serve(async (req) => {
     body = await req.json()
   } catch {
     return fail(req, 'bad_request', 400)
+  }
+
+  // ── creator applications ────────────────────────────────────────────────
+  // Handled before the target-profile lookup: the action names an
+  // APPLICATION, and the user comes from its row — taking a separate userId
+  // would let the two disagree.
+  if (body.action === 'decide_application') {
+    const appId = body.applicationId
+    if (typeof appId !== 'string' || !/^[0-9a-f-]{36}$/.test(appId)) {
+      return fail(req, 'bad_request', 400)
+    }
+
+    const { data: application } = await db
+      .from('creator_applications')
+      .select('id, user_id, status')
+      .eq('id', appId)
+      .maybeSingle()
+    if (!application) return fail(req, 'not_found', 404)
+    // Deciding a decided application would silently rewrite history.
+    if (application.status !== 'pending') return fail(req, 'already_decided', 409)
+
+    const approve = body.approve === true
+    const { error: decideErr } = await db
+      .from('creator_applications')
+      .update({
+        status: approve ? 'approved' : 'rejected',
+        reviewed_by: ctx.userId,
+        reviewed_at: new Date().toISOString(),
+        decision_note: (body.note ?? '').slice(0, 500) || null,
+      })
+      .eq('id', appId)
+      .eq('status', 'pending') // guard against a raced double-decision
+    if (decideErr) return fail(req, 'update_failed', 500, decideErr.message)
+
+    if (approve) {
+      const { error: roleErr } = await db
+        .from('user_roles')
+        .upsert(
+          { user_id: application.user_id, role: 'creator', granted_by: ctx.userId },
+          { onConflict: 'user_id,role' },
+        )
+      if (roleErr) return fail(req, 'update_failed', 500, roleErr.message)
+    }
+
+    await audit(db, ctx.userId, `creator_application.${approve ? 'approved' : 'rejected'}`,
+      'creator_application', appId, { user_id: application.user_id }, { approve, note: body.note ?? null })
+    return json(req, { ok: true, approved: approve })
   }
 
   const targetId = body.userId

@@ -30,7 +30,15 @@ const TIERS: Array<{ tier: AccessTier; label: string; costs: number[] }> = [
   { tier: 'exclusive', label: 'Exclusive — 2 to 5 credits', costs: [2, 3, 4, 5] },
 ]
 
-export function UploadForm() {
+export function UploadForm({
+  redirectTo = '/admin/videos',
+  reviewNotice = false,
+}: {
+  /** Where to land after the bytes are with Bunny. */
+  redirectTo?: string
+  /** Creator context: their upload goes to review, and the UI says so. */
+  reviewNotice?: boolean
+}) {
   const api = useAdminApi()
   const router = useRouter()
 
@@ -86,9 +94,9 @@ export function UploadForm() {
       },
       onSuccess: () => {
         // Bytes are with Bunny. From here the pipeline is autonomous:
-        // transcode → webhook → published. The videos table shows progress.
+        // transcode → webhook → published (staff) or pending_review (creator).
         setPhase({ kind: 'processing' })
-        setTimeout(() => router.push('/admin/videos'), 1800)
+        setTimeout(() => router.push(redirectTo), 1800)
       },
     })
     uploadRef.current = upload
@@ -104,7 +112,9 @@ export function UploadForm() {
       <div className="rounded-xl border border-line bg-surface p-6 text-sm">
         <p className="font-medium text-ink">Upload complete — transcoding started.</p>
         <p className="mt-1 text-ink-muted">
-          The video will publish itself when encoding finishes. Redirecting to the videos table…
+          {reviewNotice
+            ? 'When encoding finishes it goes to the moderation queue — you’ll see its status on your dashboard.'
+            : 'The video will publish itself when encoding finishes. Redirecting to the videos table…'}
         </p>
       </div>
     )

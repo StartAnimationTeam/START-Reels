@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 
-import { UploadForm } from './UploadForm'
+import { UploadForm } from '@/components/UploadForm'
 
 export const metadata: Metadata = { title: 'Upload' }
 
