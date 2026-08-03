@@ -21,7 +21,7 @@
  * Usage:  node scripts/test-ingest-live.mjs [--cleanup]
  */
 
-import { createHash } from 'node:crypto'
+import { createHmac } from 'node:crypto'
 
 import { loadEnv, makeHarness, sql } from './_db.mjs'
 
@@ -56,27 +56,28 @@ async function bunny(path, init = {}) {
  * Same signing scheme as _shared/bunny.ts — kept in sync BY THE TEST: if the
  * Edge Function's scheme drifts from what Bunny verifies, step 4 fails.
  *
- * Bunny token-auth v2: the hashable base is
- *     security_key + signature_path + expires + parameter_string
- * where signature_path is the token_path (when used) and parameter_string is
- * the OTHER query params, sorted, as "key=value" — which INCLUDES token_path
- * itself. Omitting the parameter string yields a token Bunny rejects with
- * 403 — found the hard way on this suite's first run.
+ * HS256 HMAC over (signaturePath + expires + signingData), PATH-STYLE URL.
+ * Path-style matters because hls.js resolves variant/segment URIs relative to
+ * the playlist URL — which keeps the path (token included) and drops any
+ * query string. Verified live against this library.
  */
 function signUrl(guid, ttlSeconds) {
   const expires = Math.floor(Date.now() / 1000) + ttlSeconds
   const path = `/${guid}/`
-  const parameterData = `token_path=${path}`   // sorted params, url-DEcoded form
-  const token = createHash('sha256')
-    .update(`${TOKEN_KEY}${path}${expires}${parameterData}`)
-    .digest('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
-  const qs = `token=${token}&token_path=${encodeURIComponent(path)}&expires=${expires}`
+  const signingData = `token_path=${path}`
+  const token =
+    'HS256-' +
+    createHmac('sha256', TOKEN_KEY)
+      .update(`${path}${expires}${signingData}`)
+      .digest('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+  const prefix = `https://${CDN}/bcdn_token=${token}&token_path=${encodeURIComponent(path)}&expires=${expires}`
   return {
-    playlist: `https://${CDN}/${guid}/playlist.m3u8?${qs}`,
-    forPath: (rel) => `https://${CDN}/${guid}/${rel}?${qs}`,
+    playlist: `${prefix}/${guid}/playlist.m3u8`,
+    // What a player does: resolve a relative URI against the playlist URL.
+    resolve: (fromUrl, rel) => new URL(rel, fromUrl).toString(),
   }
 }
 
@@ -189,26 +190,31 @@ try {
   h.check('signed playlist URL returns the HLS manifest',
     playlistRes.ok && playlist.includes('#EXTM3U'), `HTTP ${playlistRes.status}`)
 
-  // Pull a variant playlist + a segment THROUGH THE SAME TOKEN — this is the
-  // token_path guarantee. If this fails, only the manifest was protected and
-  // the paywall is decorative (CLAUDE.md trap #2).
+  // Walk the manifest EXACTLY the way hls.js does: resolve each relative URI
+  // against its parent playlist URL. With a path-style token this carries the
+  // token to every child request automatically; if any hop 403s, real
+  // playback would stall at that hop (CLAUDE.md trap #2).
   const variantRel = playlist.split('\n').find((l) => l.trim() && !l.startsWith('#'))
   h.check('manifest lists a variant', Boolean(variantRel), playlist.slice(0, 200))
 
   if (variantRel) {
-    const variantRes = await fetch(signed.forPath(variantRel.trim()))
+    const variantUrl = signed.resolve(signed.playlist, variantRel.trim())
+    const variantRes = await fetch(variantUrl)
     const variant = variantRes.ok ? await variantRes.text() : ''
-    h.check('variant playlist fetchable with the same token', variantRes.ok, `HTTP ${variantRes.status}`)
+    h.check('variant playlist plays via player-style relative resolution', variantRes.ok, `HTTP ${variantRes.status} for ${variantUrl}`)
 
     const segRel = variant.split('\n').find((l) => l.trim() && !l.startsWith('#'))
     if (segRel) {
-      const segPath = `${variantRel.trim().split('/').slice(0, -1).join('/')}/${segRel.trim()}`.replace(/^\//, '')
-      const segRes = await fetch(signed.forPath(segPath))
-      h.check('media segment fetchable with the same token (token_path covers it)',
-        segRes.ok, `HTTP ${segRes.status} for ${segPath}`)
+      const segUrl = signed.resolve(variantUrl, segRel.trim())
+      const segRes = await fetch(segUrl)
+      h.check('media segment plays via relative resolution (token travels in the path)',
+        segRes.ok, `HTTP ${segRes.status} for ${segUrl}`)
 
-      const segUnsigned = await fetch(`https://${CDN}/${guid}/${segPath}`)
-      h.check('...and the SAME segment unsigned is refused', segUnsigned.status === 403, `HTTP ${segUnsigned.status}`)
+      const bare = new URL(segUrl)
+      const bareUrl = `https://${CDN}${bare.pathname.replace(/^\/bcdn_token=[^/]+/, '')}`
+      const segUnsigned = await fetch(bareUrl, { headers: { Referer: 'http://localhost:3000/' } })
+      h.check('...and the SAME segment without the token is refused (even with a referrer)',
+        segUnsigned.status === 403, `HTTP ${segUnsigned.status} for ${bareUrl}`)
     }
   }
 

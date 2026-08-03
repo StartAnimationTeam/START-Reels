@@ -1,4 +1,4 @@
-import { fetchVideo, isConfigured, mapBunnyStatus, thumbnailUrl } from '../_shared/bunny.ts'
+import { fetchVideo, isConfigured, mapBunnyStatus, signFileUrl } from '../_shared/bunny.ts'
 import { fail, handlePreflight, json } from '../_shared/cors.ts'
 import { serviceClient } from '../_shared/db.ts'
 import { claim, complete, release } from '../_shared/webhooks.ts'
@@ -58,6 +58,7 @@ Deno.serve(async (req) => {
   }
   if (claimState === 'already_processed') return json(req, { ok: true, replay: true })
 
+  let thumbDebugOut = 'n/a'
   try {
     // ── the re-fetch: the only part of this we trust ─────────────────────
     const video = await fetchVideo(guid)
@@ -72,12 +73,66 @@ Deno.serve(async (req) => {
       .maybeSingle()
 
     if (!row) {
-      await complete(db, eventId)
+      // RELEASE the claim rather than completing it. "Unknown" often means
+      // "not attached yet": Bunny can deliver the encoded webhook before our
+      // videos row points at the GUID (observed in practice — its delivery
+      // raced our test's attach step). Completing would consume the event id
+      // and make every later retry a skipped replay; releasing lets the next
+      // delivery — or a manual re-trigger — converge once the row exists. A
+      // genuinely foreign GUID just cycles claim/release harmlessly.
+      await release(db, eventId, 'unknown_video_guid')
       return json(req, { ok: true, unknown_video: true })
     }
 
     if (state === 'ready') {
-      const thumb = thumbnailUrl(guid, video.thumbnailFileName)
+      // Re-host the thumbnail into Supabase Storage. The CDN original sits
+      // behind token auth (everything on the pull zone does), so a plain
+      // <img> in the browse grid would 403. Thumbnails are public marketing
+      // surface — the catalog itself is public — so a public bucket is
+      // correct, and it removes any expiring URL from catalog rows.
+      let thumb: string | null = null
+      let thumbDebug = 'no_filename'
+      if (video.thumbnailFileName) {
+        try {
+          const signedThumb = await signFileUrl(guid, video.thumbnailFileName, 300)
+          const res = await fetch(signedThumb)
+          if (!res.ok) {
+            thumbDebug = `cdn_fetch_${res.status}`
+          } else {
+            const bytes = new Uint8Array(await res.arrayBuffer())
+            const path = `videos/${guid}.jpg`
+            const up = await fetch(
+              `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/thumbnails/${path}`,
+              {
+                method: 'POST',
+                headers: {
+                  // The injected key is the NEW sb_secret_ format — not a JWT.
+                  // As a Bearer it fails "Invalid Compact JWS"; it identifies
+                  // the role through the apikey header instead. Same rule as
+                  // PostgREST (scripts/test-rls.mjs learned it first).
+                  apikey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+                  'Content-Type': 'image/jpeg',
+                  'x-upsert': 'true',
+                },
+                body: bytes,
+              },
+            )
+            if (!up.ok) {
+              thumbDebug = `storage_${up.status}: ${(await up.text()).slice(0, 200)}`
+            } else {
+              thumb = `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/public/thumbnails/${path}`
+              thumbDebug = 'ok'
+            }
+          }
+        } catch (thumbErr) {
+          // A missing thumbnail must not fail the publish — the card renders
+          // its placeholder and a later webhook retry can fill it in.
+          thumbDebug = `threw: ${thumbErr instanceof Error ? thumbErr.message : String(thumbErr)}`
+        }
+      }
+
+      thumbDebugOut = thumbDebug
+
       const patch: Record<string, unknown> = {
         duration_seconds: Math.round(video.length ?? 0),
         ...(thumb ? { thumbnail_url: thumb } : {}),
@@ -109,7 +164,7 @@ Deno.serve(async (req) => {
     // 'processing' → nothing to persist; the row is already in that state.
 
     await complete(db, eventId)
-    return json(req, { ok: true, state })
+    return json(req, { ok: true, state, ...(state === 'ready' ? { thumb: thumbDebugOut } : {}) })
   } catch (err) {
     await release(db, eventId, err)
     return fail(req, 'processing_failed', 500, err instanceof Error ? err.message : undefined)

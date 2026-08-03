@@ -91,17 +91,18 @@ export async function createDirectUpload(title: string): Promise<{
  * manifest would leave the segments openly fetchable — the exact hole that
  * makes a paywall decorative (trap #2).
  *
- * Modern Bunny scheme (per BunnyWay/BunnyCDN.TokenAuthentication):
+ * Modern Bunny scheme, VERIFIED LIVE against this library:
  *   token = "HS256-" + base64url( HMAC_SHA256( key,
  *             signaturePath + expires + ipBytes + signingData ) )
- * with signingData = sorted "k=v" params joined by "&" (raw values), and
- * ipBytes empty when not IP-locking (we don't — mobile clients change IP
- * mid-stream, plan §2).
+ * with signingData = "token_path=/guid/" (sorted "k=v" params, raw values)
+ * and ipBytes empty — we don't IP-lock, mobile clients change IP mid-stream.
  *
- * STATUS: pending live verification. The library currently has "Block direct
- * URL file access" enabled, which 403s every vz-* URL unconditionally — no
- * signature can succeed until that setting is flipped and CDN token auth is
- * enabled. scripts/test-ingest-live.mjs proves whichever scheme is live.
+ * PATH-STYLE URL, not query-style, and this is load-bearing: hls.js resolves
+ * variant and segment URIs RELATIVE to the playlist URL, which preserves the
+ * path but DROPS the query string. A query-style token plays the manifest and
+ * then 403s every segment. With the token as a path component
+ * (/bcdn_token=…/), relative resolution carries it to every child request,
+ * and Bunny validates each against token_path=/guid/.
  */
 export async function signPlaybackUrl(
   guid: string,
@@ -131,9 +132,19 @@ export async function signPlaybackUrl(
       .replace(/=+$/, '')
 
   return {
-    url: `https://${CDN_HOSTNAME}/${guid}/playlist.m3u8?token=${token}&token_path=${encodeURIComponent(path)}&expires=${expires}`,
+    url: `https://${CDN_HOSTNAME}/bcdn_token=${token}&token_path=${encodeURIComponent(path)}&expires=${expires}/${guid}/playlist.m3u8`,
     expires,
   }
+}
+
+/**
+ * Signed URL for a SINGLE file (thumbnail fetch during webhook processing —
+ * the server-side fetch that re-hosts it into Supabase Storage).
+ */
+export async function signFileUrl(guid: string, fileName: string, ttlSeconds: number): Promise<string> {
+  const { url } = await signPlaybackUrl(guid, ttlSeconds)
+  // same directory token; swap the target file
+  return url.replace(/playlist\.m3u8$/, fileName)
 }
 
 /** Fetch one video's state from Bunny — used by bunny-webhook to re-verify. */
