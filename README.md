@@ -71,7 +71,7 @@ can read, reason about and typecheck the code.
 | 2 | Playback & credits â€” entitlements, signed URLs, heartbeats | **done** â€” 74 checks green (entitlements 29, watch-time 25, HTTP paywall 20) plus the loop-closer: a real unlock returns a URL that actually streams |
 | 3 | Browse - search, rails, recommendations, favorites | **done** - FTS + prefix fallback, SQL recommender, scroll-snap rails, optimistic favorites |
 | 4 | Profile & wallet | **done** - daily rewards (raced-claim safe), promo codes (no-oracle errors), history with resume, settings + avatars |
-| 5 | Creator flow | not started |
+| 5 | Creator flow | **done** - apply via RLS, staff review queue, creator uploads land in moderation |
 | 6 | Admin & moderation | **first pass done** - upload UI, video + user management, audited; reports/promos/settings next |
 | 7 | Analytics | not started |
 | 8 | Hardening & launch | not started |
