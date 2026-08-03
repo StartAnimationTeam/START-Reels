@@ -46,3 +46,9 @@ verify_jwt = false
 
 [functions.bunny-webhook]
 verify_jwt = false
+
+[functions.admin-videos]
+verify_jwt = false
+
+[functions.admin-users]
+verify_jwt = false

@@ -81,6 +81,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   promo_already_redeemed: 'You’ve already used that code.',
   maintenance_mode: 'START Video Library is down for maintenance. We’ll be back shortly.',
   rate_limited: 'Too many requests. Give it a moment and try again.',
+  cannot_moderate_self: 'You can’t suspend or ban your own account.',
+  cannot_demote_self: 'You can’t remove your own administrator role — ask another administrator.',
+  upload_create_failed: 'Couldn’t start the upload. Try again in a moment.',
+  upload_failed: 'The upload failed partway. Choosing the same file will resume it.',
+  video_not_ready: 'This video hasn’t finished processing yet.',
+  tier_cost_mismatch: 'That price doesn’t match the tier: free is 0, premium is 1, exclusive is 2–5.',
   ledger_hold_not_found_or_already_settled: 'That charge was already settled.',
 }
 
