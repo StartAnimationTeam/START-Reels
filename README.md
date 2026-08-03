@@ -74,7 +74,7 @@ can read, reason about and typecheck the code.
 | 5 | Creator flow | **done** - apply via RLS, staff review queue, creator uploads land in moderation |
 | 6 | Admin & moderation | **done** - upload, video/user/creator management, reports queue, warnings, promo admin, settings, audit viewer, maintenance mode |
 | 7 | Analytics | **done** - nightly rollups (idempotent), hourly trending MV, Bunny audit columns, validated-palette dashboards |
-| 8 | Hardening & launch | not started |
+| 8 | Hardening & launch | **code done** - pg rate limits (race-tested), security headers, 12-suite verify chain; owner runbook items remain |
 
 ## Tests
 
