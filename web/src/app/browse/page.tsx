@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { VideoCard } from '@/components/VideoCard'
 import { createAnonSupabase } from '@/lib/supabase-server'
@@ -20,17 +21,46 @@ export const revalidate = 60
 export default async function BrowsePage() {
   const supabase = createAnonSupabase()
 
-  const { data: videos, error } = await supabase
-    .from('videos')
-    .select('id, title, access_tier, credit_cost, duration_seconds, thumbnail_url')
-    .eq('status', 'published')
-    .is('deleted_at', null)
-    .order('published_at', { ascending: false })
-    .limit(48)
+  const [{ data: videos, error }, { data: categories }] = await Promise.all([
+    supabase
+      .from('videos')
+      .select('id, title, access_tier, credit_cost, duration_seconds, thumbnail_url')
+      .eq('status', 'published')
+      .is('deleted_at', null)
+      .order('published_at', { ascending: false })
+      .limit(48),
+    supabase
+      .from('categories')
+      .select('slug, name')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true }),
+  ])
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Browse</h1>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold tracking-tight">Browse</h1>
+        <Link
+          href="/search"
+          className="rounded-lg border border-line-strong px-4 py-2 text-sm text-ink-secondary transition-colors hover:border-brand hover:text-ink"
+        >
+          Search…
+        </Link>
+      </div>
+
+      {(categories?.length ?? 0) > 0 && (
+        <div className="no-scrollbar mt-4 flex gap-2 overflow-x-auto">
+          {categories!.map((category) => (
+            <Link
+              key={category.slug}
+              href={`/category/${category.slug}`}
+              className="shrink-0 rounded-full border border-line-strong px-3.5 py-1.5 text-sm text-ink-secondary transition-colors hover:border-brand hover:text-ink"
+            >
+              {category.name}
+            </Link>
+          ))}
+        </div>
+      )}
 
       {error ? (
         <p className="mt-6 text-sm text-ink-muted">

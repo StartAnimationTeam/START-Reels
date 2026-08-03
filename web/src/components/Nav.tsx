@@ -6,6 +6,7 @@ import { CreditBadge } from './CreditBadge'
 
 const LINKS = [
   { href: '/browse', label: 'Browse' },
+  { href: '/search', label: 'Search' },
   { href: '/me/favorites', label: 'My list' },
 ]
 

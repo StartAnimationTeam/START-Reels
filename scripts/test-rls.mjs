@@ -252,9 +252,40 @@ async function main() {
       check("Bob cannot read Alice's profile", !rows.some((x) => x.user_id === alice.id), `saw ${rows.length} rows`)
     }
 
+    // -- 2b. favorites: the one client-writable table ---------------------
+    console.log('\nFavorites (the one client-writable table):')
+    {
+      const video = await svc(`videos?slug=eq.welcome-to-start&select=id`)
+      const videoId = video.data?.[0]?.id ?? video?.[0]?.id
+      if (!videoId) {
+        check('seeded video available for favorites test', false, 'run scripts/seed-catalog.mjs first')
+      } else {
+        const mine = await rest('favorites', {
+          token: B,
+          method: 'POST',
+          body: { user_id: bob.id, video_id: videoId },
+        })
+        check('Bob CAN favorite a video as himself', mine.ok, `HTTP ${mine.status}: ${JSON.stringify(mine.data)}`)
+
+        const forged = await rest('favorites', {
+          token: B,
+          method: 'POST',
+          body: { user_id: alice.id, video_id: videoId },
+        })
+        check("Bob cannot write a favorite onto Alice's account", !forged.ok, `HTTP ${forged.status} - INSERT SUCCEEDED`)
+
+        const readBack = await rest('favorites?select=user_id', { token: A })
+        const rows = Array.isArray(readBack.data) ? readBack.data : []
+        check("Alice sees none of Bob's favorites", rows.length === 0, `saw ${rows.length}`)
+
+        const del = await rest(`favorites?video_id=eq.${videoId}`, { token: B, method: 'DELETE' })
+        check('Bob can remove his own favorite', del.ok, `HTTP ${del.status}`)
+      }
+    }
+
     // -- 3. anonymous access ----------------------------------------------
     console.log('\nAnonymous access (publishable key only, no user token):')
-    for (const table of ['profiles', 'credit_ledger', 'user_roles', 'audit_logs']) {
+    for (const table of ['profiles', 'credit_ledger', 'user_roles', 'audit_logs', 'favorites']) {
       const r = await rest(`${table}?select=*&limit=5`, {})
       const n = Array.isArray(r.data) ? r.data.length : 0
       check(`anon reads nothing from ${table}`, n === 0, `saw ${n} rows`)

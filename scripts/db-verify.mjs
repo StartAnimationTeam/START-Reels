@@ -63,6 +63,8 @@ const EXPECTED = [
   // Phase 2
   'videos', 'categories', 'video_categories', 'tags', 'video_tags',
   'upload_sessions', 'video_entitlements', 'watch_sessions', 'watch_history',
+  // Phase 3
+  'favorites',
 ]
 
 const tables = await sql(`

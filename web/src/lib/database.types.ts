@@ -129,6 +129,20 @@ export interface Database {
         Update: never
         Relationships: []
       }
+      video_categories: {
+        Row: { video_id: string; category_id: string; is_primary: boolean }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      favorites: {
+        Row: { user_id: string; video_id: string; created_at: string }
+        // The one client-writable table — RLS WITH CHECK pins user_id to the
+        // caller, and the column grant excludes created_at.
+        Insert: { user_id: string; video_id: string }
+        Update: never
+        Relationships: []
+      }
       profiles: {
         Row: {
           user_id: string
@@ -237,7 +251,20 @@ export interface Database {
         Relationships: []
       }
     }
-    Functions: Record<never, never>
+    Functions: {
+      recommended_videos: {
+        Args: { p_limit?: number }
+        Returns: {
+          id: string
+          title: string
+          slug: string
+          access_tier: AccessTier
+          credit_cost: number
+          duration_seconds: number | null
+          thumbnail_url: string | null
+        }[]
+      }
+    }
     Enums: {
       app_role: AppRole
       credit_type: CreditType

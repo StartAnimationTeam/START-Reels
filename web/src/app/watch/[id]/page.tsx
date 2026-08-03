@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
+import { FavoriteButton } from '@/components/FavoriteButton'
 import { currentUser } from '@/lib/auth'
+import { isFavorited } from '@/lib/catalog'
 import { createAnonSupabase, createServerSupabase } from '@/lib/supabase-server'
 import { durationLabel, tierCostLabel } from '@/lib/labels'
 import { WatchGate } from './WatchGate'
@@ -44,18 +46,23 @@ export default async function WatchPage({ params }: Props) {
   // hidden video EXISTS is itself a leak.
   if (!video) notFound()
 
-  // Does the viewer already hold a live entitlement? Read through RLS — a
-  // signed-out visitor simply gets none.
+  // Does the viewer already hold a live entitlement, and is this saved? Both
+  // read through RLS — a signed-out visitor simply gets neither.
   let hasEntitlement = false
+  let favorited = false
   if (userId) {
-    const { data: ents } = await supabase
-      .from('video_entitlements')
-      .select('id')
-      .eq('video_id', id)
-      .is('revoked_at', null)
-      .gt('expires_at', new Date().toISOString())
-      .limit(1)
+    const [{ data: ents }, fav] = await Promise.all([
+      supabase
+        .from('video_entitlements')
+        .select('id')
+        .eq('video_id', id)
+        .is('revoked_at', null)
+        .gt('expires_at', new Date().toISOString())
+        .limit(1),
+      isFavorited(supabase, id),
+    ])
     hasEntitlement = Boolean(ents?.length)
+    favorited = fav
   }
 
   return (
@@ -71,7 +78,10 @@ export default async function WatchPage({ params }: Props) {
       />
 
       <div className="mt-6 animate-rise">
-        <h1 className="text-2xl font-semibold tracking-tight">{video.title}</h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-2xl font-semibold tracking-tight">{video.title}</h1>
+          {userId && <FavoriteButton videoId={video.id} initiallyFavorited={favorited} />}
+        </div>
         <p className="mt-1 text-sm text-ink-muted">
           {tierCostLabel(video.access_tier, video.credit_cost)}
           {' · '}
