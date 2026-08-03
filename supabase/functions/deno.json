@@ -1,0 +1,4 @@
+{
+  "//": "Scopes Deno resolution for the Edge Functions. Without this, `deno check` discovers the repo-root package.json, switches to node_modules resolution, and demands `deno install` for npm:/jsr: deps that live only in Deno's global cache. 'none' = always use the global cache, matching how Supabase's edge runtime resolves them.",
+  "nodeModulesDir": "none"
+}

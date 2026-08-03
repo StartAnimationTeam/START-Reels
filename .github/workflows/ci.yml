@@ -46,8 +46,14 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      # Run from INSIDE supabase/functions: Deno discovers config from the
+      # CWD, and the deno.json there ("nodeModulesDir": "none") keeps it on the
+      # global cache. From the repo root it finds package.json instead,
+      # switches to node_modules resolution, and demands `deno install` for
+      # deps that only exist in Deno's world.
       - name: deno check
-        run: deno check supabase/functions/**/*.ts
+        working-directory: supabase/functions
+        run: deno check */*.ts
 
   migrations:
     name: Migration hygiene

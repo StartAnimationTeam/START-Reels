@@ -1,4 +1,4 @@
-import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2'
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.111.0'
 
 /**
  * Maintenance mode gate for the value-moving paths (unlock, playback).
