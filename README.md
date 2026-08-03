@@ -72,7 +72,7 @@ can read, reason about and typecheck the code.
 | 3 | Browse - search, rails, recommendations, favorites | **done** - FTS + prefix fallback, SQL recommender, scroll-snap rails, optimistic favorites |
 | 4 | Profile & wallet | not started |
 | 5 | Creator flow | not started |
-| 6 | Admin & moderation | not started |
+| 6 | Admin & moderation | **first pass done** - upload UI, video + user management, audited; reports/promos/settings next |
 | 7 | Analytics | not started |
 | 8 | Hardening & launch | not started |
 
