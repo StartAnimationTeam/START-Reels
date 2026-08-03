@@ -72,7 +72,7 @@ can read, reason about and typecheck the code.
 | 3 | Browse - search, rails, recommendations, favorites | **done** - FTS + prefix fallback, SQL recommender, scroll-snap rails, optimistic favorites |
 | 4 | Profile & wallet | **done** - daily rewards (raced-claim safe), promo codes (no-oracle errors), history with resume, settings + avatars |
 | 5 | Creator flow | **done** - apply via RLS, staff review queue, creator uploads land in moderation |
-| 6 | Admin & moderation | **first pass done** - upload UI, video + user management, audited; reports/promos/settings next |
+| 6 | Admin & moderation | **done** - upload, video/user/creator management, reports queue, warnings, promo admin, settings, audit viewer, maintenance mode |
 | 7 | Analytics | not started |
 | 8 | Hardening & launch | not started |
 
