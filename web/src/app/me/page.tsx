@@ -3,7 +3,7 @@ import Link from 'next/link'
 
 import { requireUser, rolesOf } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase-server'
-import { creditLabel, LEDGER_REASON_LABELS, LEDGER_STATUS_LABELS, roleLabel } from '@/lib/labels'
+import { creditLabel, durationLabel, LEDGER_REASON_LABELS, LEDGER_STATUS_LABELS, roleLabel } from '@/lib/labels'
 
 export const metadata: Metadata = { title: 'Your profile' }
 
@@ -18,7 +18,7 @@ export default async function ProfilePage() {
   // if a policy were ever wrong, an explicit filter would hide the bug. Let RLS
   // be the only thing scoping them, so a mistake shows up here rather than in
   // production.
-  const [profileRes, balanceRes, ledgerRes, roles] = await Promise.all([
+  const [profileRes, balanceRes, ledgerRes, roles, historyRes] = await Promise.all([
     supabase.from('profiles').select('email, display_name, bio, created_at').maybeSingle(),
     supabase.from('credit_balances').select('available_balance, pending_holds').maybeSingle(),
     supabase
@@ -27,7 +27,15 @@ export default async function ProfilePage() {
       .order('created_at', { ascending: false })
       .limit(10),
     rolesOf(userId),
+    supabase.from('watch_history').select('total_seconds_watched, completed'),
   ])
+
+  // Personal analytics from the user's OWN rows via RLS — validated seconds,
+  // not client claims, same numbers the platform dashboard aggregates.
+  const watched = historyRes.data ?? []
+  const totalWatchSeconds = watched.reduce((sum, w) => sum + Number(w.total_seconds_watched), 0)
+  const videosWatched = watched.length
+  const videosFinished = watched.filter((w) => w.completed).length
 
   const profile = profileRes.data
   const available = Number(balanceRes.data?.available_balance ?? 0)
@@ -55,7 +63,22 @@ export default async function ProfilePage() {
         </p>
       )}
 
-      <section className="animate-fade mt-8 rounded-xl border border-line bg-surface p-6">
+      {videosWatched > 0 && (
+        <div className="mt-8 grid grid-cols-3 gap-3">
+          {[
+            { label: 'Videos watched', value: String(videosWatched) },
+            { label: 'Finished', value: String(videosFinished) },
+            { label: 'Watch time', value: durationLabel(totalWatchSeconds) },
+          ].map((tile) => (
+            <div key={tile.label} className="rounded-xl border border-line bg-surface p-4">
+              <p className="text-xs text-ink-muted">{tile.label}</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums">{tile.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <section className="animate-fade mt-6 rounded-xl border border-line bg-surface p-6">
         <h2 className="text-sm font-medium text-ink-secondary">Credits</h2>
         <p className="mt-2 text-3xl font-semibold" style={{ color: 'var(--brand-bright)' }}>
           {creditLabel(available)}

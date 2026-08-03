@@ -25,11 +25,19 @@ export default async function HomePage() {
   const { userId } = await auth()
   const anon = createAnonSupabase()
 
-  const [featured, recent, categories] = await Promise.all([
+  const [featured, recent, categories, trendingRes] = await Promise.all([
     featuredVideos(anon),
     recentVideos(anon),
     activeCategories(anon),
+    // Trending is the hourly-refreshed materialized view — public catalog
+    // data only, so the anon client reads it like any rail.
+    anon
+      .from('mv_trending_videos')
+      .select('id, title, access_tier, credit_cost, duration_seconds, thumbnail_url')
+      .order('trend_score', { ascending: false })
+      .limit(12),
   ])
+  const trendingRail = trendingRes.data ?? []
 
   let continueRail: Awaited<ReturnType<typeof continueWatching>> = []
   let recommendedRail: Awaited<ReturnType<typeof recommendedVideos>> = []
@@ -60,6 +68,7 @@ export default async function HomePage() {
 
       <div className="mt-10">
         <VideoRail title="Continue watching" videos={continueRail} />
+        <VideoRail title="Trending" videos={trendingRail} />
         <VideoRail title="Recommended for you" videos={recommendedRail} />
         <VideoRail title="Featured" videos={featuredRest} />
         <VideoRail

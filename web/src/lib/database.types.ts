@@ -210,6 +210,39 @@ export interface Database {
         Update: never
         Relationships: []
       }
+      platform_daily_stats: {
+        Row: {
+          day: string
+          dau: number
+          mau: number
+          new_registrations: number
+          videos_published: number
+          watch_seconds: number
+          credits_consumed: number
+          credits_granted: number
+          unlocks: number
+          bunny_watch_seconds: number | null
+          storage_bytes: number | null
+          computed_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      video_daily_stats: {
+        Row: {
+          day: string
+          video_id: string
+          views: number
+          unique_viewers: number
+          watch_seconds: number
+          credits_earned: number
+          completions: number
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           id: number
@@ -322,6 +355,18 @@ export interface Database {
       }
     }
     Views: {
+      mv_trending_videos: {
+        Row: {
+          id: string
+          title: string
+          access_tier: AccessTier
+          credit_cost: number
+          duration_seconds: number | null
+          thumbnail_url: string | null
+          trend_score: number
+        }
+        Relationships: []
+      }
       credit_balances: {
         Row: {
           user_id: string

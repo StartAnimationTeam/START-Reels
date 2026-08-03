@@ -58,3 +58,6 @@ verify_jwt = false
 
 [functions.admin-platform]
 verify_jwt = false
+
+[functions.analytics-rollup]
+verify_jwt = false
