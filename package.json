@@ -1,0 +1,24 @@
+{
+  "name": "start-video-library",
+  "version": "0.1.0",
+  "private": true,
+  "description": "In-house video streaming platform for START LANDS Inc.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "test:rls": "node scripts/test-rls.mjs",
+    "db:push": "supabase db push",
+    "db:types": "supabase gen types typescript --project-id ioulkocgnprfyofmvnbd > web/src/lib/database.types.ts",
+    "fn:deploy": "supabase functions deploy",
+    "fn:secrets": "supabase secrets set --env-file supabase/.env",
+    "check:fn": "deno check supabase/functions/**/*.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.111.0"
+  },
+  "devDependencies": {
+    "supabase": "^2.0.0"
+  }
+}

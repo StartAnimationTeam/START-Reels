@@ -1,0 +1,189 @@
+@import "tailwindcss";
+
+/*
+ * START Video Library — brand tokens.
+ *
+ * The palette is START LANDS' own (same values as START AI Studio's
+ * globals.css, so the two products read as one company), but the surfaces are
+ * inverted: this app is DARK BY DEFAULT and AI Studio is light.
+ *
+ * That is a deliberate divergence, not a drift. A video library is dark for
+ * reasons a dashboard isn't: video is letterboxed against the page, so light
+ * chrome puts a bright frame around every thumbnail and fights the content for
+ * attention; and people watch in the evening with the lights off. Netflix,
+ * Dreambox and Freereels all land in the same place for the same reason.
+ *
+ * The purple stays structural and the pink/orange stays expressive, exactly as
+ * the Identity Guidelines split them — only the ground they sit on changes.
+ */
+:root {
+  /* Structural purples (§3.2) */
+  --brand-deep: #5e148f;
+  --brand: #af28ea;
+  --brand-bright: #a735f2;
+  --brand-ink: #350d8c;
+
+  /* Gradient spectrum (§2.4) — the ring in the mark */
+  --brand-magenta: #be0e80;
+  --brand-coral: #e07d86;
+  --brand-blush: #e8c8eb;
+
+  /* Expressive (§3.4) — highlights, CTAs, interactive feedback */
+  --accent-pink: #fb6ed0;
+  --accent-pink-soft: #ff96ff;
+  --accent-peach: #ffcb9f;
+  --accent-orange: #ffa377;
+
+  /* Secondary palette (§3.3) — status and data series */
+  --sea: #63f2e4;
+  --teal: #2497aa;
+  --sky: #44afe2;
+  --ocean: #0468bf;
+
+  /*
+   * Surfaces, tinted from the structural purple rather than neutral grey, so
+   * the chrome belongs to the brand instead of sitting beside it — the same
+   * rule as the light app, applied downward.
+   *
+   * Not pure black: #0b0710 keeps thumbnails from appearing to float in a void
+   * and stops OLED smearing on scroll.
+   */
+  --background: #0b0710;
+  --foreground: #f4eff8;
+  --surface: #140d1c;
+  --surface-muted: #1c1327;
+  --surface-raised: #241933;
+  --surface-brand: #2a1140;
+  --border: #2c2038;
+  --border-strong: #3d2d4f;
+
+  /* Text ramp — four steps, because three always ends with one doing two jobs */
+  --text-primary: #f4eff8;
+  --text-secondary: #bfb0cd;
+  --text-muted: #8a7a99;
+  --text-faint: #5f5370;
+
+  /* Status */
+  --success: #3ddc97;
+  --warning: #ffbe5c;
+  --danger: #ff6b6b;
+
+  --brand-gradient: linear-gradient(100deg, var(--brand-deep) 0%, var(--brand) 45%, var(--brand-magenta) 100%);
+  --brand-gradient-warm: linear-gradient(100deg, var(--brand) 0%, var(--brand-magenta) 50%, var(--brand-coral) 100%);
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 8px rgb(0 0 0 / 0.3);
+  --shadow-lift: 0 12px 32px -8px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.4);
+  --shadow-brand: 0 6px 24px -6px rgb(175 40 234 / 0.5);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-brand: var(--brand);
+  --color-brand-deep: var(--brand-deep);
+  --color-brand-bright: var(--brand-bright);
+  --color-brand-magenta: var(--brand-magenta);
+  --color-brand-coral: var(--brand-coral);
+  --color-brand-blush: var(--brand-blush);
+
+  --color-accent-pink: var(--accent-pink);
+  --color-accent-orange: var(--accent-orange);
+  --color-accent-peach: var(--accent-peach);
+
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-brand: var(--surface-brand);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+
+  --color-ink: var(--text-primary);
+  --color-ink-secondary: var(--text-secondary);
+  --color-ink-muted: var(--text-muted);
+  --color-ink-faint: var(--text-faint);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  /*
+   * Tailwind's violet ramp re-cut around the brand purples, so every stock
+   * `violet-*` class lands on the real brand instead of #7c3aed — close enough
+   * to the brand to read as sloppy printing rather than as a different colour.
+   */
+  --color-violet-50: #faf6fe;
+  --color-violet-100: #f5eefc;
+  --color-violet-200: #e9dcf8;
+  --color-violet-300: #d7bcf4;
+  --color-violet-400: #c274f0;
+  --color-violet-500: #b83ded;
+  --color-violet-600: #af28ea;
+  --color-violet-700: #5e148f;
+  --color-violet-800: #4c1075;
+  --color-violet-900: #3d0d5e;
+  --color-violet-950: #26073a;
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; }
+
+/* A focus ring that stays visible on every surface in the app. */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Rails scroll horizontally; hide the bar without disabling the scroll. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+.brand-gradient-text {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---------------------------------------------------------------------------
+ * Motion — entrances and genuine signals only. Nothing loops for decoration.
+ * ------------------------------------------------------------------------ */
+@keyframes rise     { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes fade     { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scale-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes shimmer  { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+
+.animate-rise     { animation: rise 0.45s var(--ease-out) both; }
+.animate-fade     { animation: fade 0.35s var(--ease-out) both; }
+.animate-scale-in { animation: scale-in 0.28s var(--ease-out) both; }
+
+.animate-shimmer {
+  background-image: linear-gradient(90deg,
+    var(--surface-muted) 0%, var(--surface-raised) 50%, var(--surface-muted) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* Honour the OS setting. Sustained motion is genuinely unpleasant with a
+   vestibular disorder, and this is an app people sit in front of for hours. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-shimmer { background: var(--surface-muted); }
+}

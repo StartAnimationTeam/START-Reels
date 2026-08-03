@@ -1,0 +1,47 @@
+# === secrets — never commit ===
+.env
+.env.*
+!.env.example
+!.env.local.example
+*.pem
+*.key
+
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next.js
+.next/
+out/
+build/
+dist/
+
+# vercel
+.vercel
+
+# supabase
+supabase/.branches
+supabase/.temp
+supabase/.env
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# testing
+coverage/
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# local scratch
+/tmp/
+*.local

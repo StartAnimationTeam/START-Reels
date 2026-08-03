@@ -1,0 +1,30 @@
+project_id = "ioulkocgnprfyofmvnbd"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[functions]
+
+# verify_jwt = false is REQUIRED for every function that does its own auth.
+#
+# Two distinct reasons, both of which produce the same confusing symptom — a
+# 401 that never reaches your handler, so the logs show nothing:
+#
+#   webhooks       carry no Clerk session token at all; they authenticate with
+#                  a signature instead (svix for Clerk, re-fetch for Bunny).
+#   clerk-verified functions present a CLERK JWT, which the platform's gate does
+#                  not recognise as a Supabase JWT. The function verifies it
+#                  itself against Clerk's JWKS.
+#
+# See CLAUDE.md trap #9.
+
+[functions.clerk-webhook]
+verify_jwt = false

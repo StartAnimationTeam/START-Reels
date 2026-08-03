@@ -1,0 +1,98 @@
+name: CI
+
+# The sibling project has no CI at all. Greenfield is the cheap moment to add
+# it — every check here has caught a real error in that codebase at some point.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  web:
+    name: Typecheck & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+        working-directory: web
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+        working-directory: web
+
+      # Build needs the public Clerk/Supabase keys present or the Clerk provider
+      # throws at prerender. These are publishable values, not secrets — but
+      # they still come from repo secrets so a key rotation is one edit.
+      - name: Build
+        run: npm run build
+        working-directory: web
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+  functions:
+    name: Edge Functions typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: deno check
+        run: deno check supabase/functions/**/*.ts
+
+  migrations:
+    name: Migration hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Migrations are numbered and sequential, and an applied one is never
+      # edited. A duplicate or out-of-order prefix means two developers picked
+      # the same number and one of them will be silently skipped on deploy.
+      - name: Numbers are unique and sequential
+        run: |
+          cd supabase/migrations
+          nums=$(ls *.sql | cut -d_ -f1)
+          dupes=$(echo "$nums" | sort | uniq -d)
+          if [ -n "$dupes" ]; then
+            echo "Duplicate migration numbers: $dupes"; exit 1
+          fi
+          if [ "$(echo "$nums" | sort)" != "$(echo "$nums")" ]; then
+            echo "Migrations are not in sorted order"; exit 1
+          fi
+          echo "OK: $(echo "$nums" | wc -l) migrations, no duplicates"
+
+      # CLAUDE.md trap #7: a SECURITY DEFINER function that takes a user id and
+      # is left executable by `authenticated` lets anyone with the publishable
+      # key act as anyone else. This is the check the sibling project didn't
+      # have, and it shipped exploitable for months.
+      - name: Every SECURITY DEFINER function is revoked
+        run: |
+          cd supabase/migrations
+          fail=0
+          for f in *.sql; do
+            defs=$(grep -c "security definer" "$f" || true)
+            revs=$(grep -c "revoke execute" "$f" || true)
+            if [ "$defs" -gt 0 ] && [ "$revs" -eq 0 ]; then
+              echo "$f declares $defs SECURITY DEFINER function(s) but has no 'revoke execute'"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: No NEXT_PUBLIC_ prefix on a secret
+        run: |
+          if grep -rInE "NEXT_PUBLIC_[A-Z_]*(SECRET|SERVICE_ROLE|PRIVATE|TOKEN_KEY|WEBHOOK)" \
+               --include=*.ts --include=*.tsx --include=*.yml --include=*.example . ; then
+            echo "A secret is exposed to the browser bundle"; exit 1
+          fi
+          echo "OK"
