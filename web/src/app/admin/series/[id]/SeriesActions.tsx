@@ -63,9 +63,20 @@ export function SeriesActions({
   return (
     <div className="flex flex-col items-end gap-2">
       {status !== 'published' && status !== 'removed' && scheduledPublishAt && (
-        <p className="text-xs" style={{ color: 'var(--warning)' }}>
-          ⏱ {comingSoonLabel(scheduledPublishAt)} — live in Coming Soon
-        </p>
+        new Date(scheduledPublishAt).getTime() <= Date.now() ? (
+          // The timer fired but the publisher held: it never releases a
+          // series with zero watchable episodes. Say so, or this reads as
+          // "the timer is broken" (trap #15).
+          <p className="max-w-md text-right text-xs" style={{ color: 'var(--warning)' }}>
+            ⏱ Premiere time passed — waiting for the first episode to finish
+            encoding. It publishes within a minute of one being ready, or press
+            Publish now once episodes appear below.
+          </p>
+        ) : (
+          <p className="text-xs" style={{ color: 'var(--warning)' }}>
+            ⏱ {comingSoonLabel(scheduledPublishAt)} — live in Coming Soon
+          </p>
+        )
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-2">
