@@ -2,8 +2,9 @@
 /**
  * Rate limits, exercised for real.
  *
- *   - the counter is race-safe: 40 CONCURRENT unlock calls yield exactly 20
- *     passes and 20 429s (the ON CONFLICT arithmetic, not politeness)
+ *   - the counter is race-safe: 60 CONCURRENT unlock calls yield exactly 40
+ *     passes and 20 429s (the ON CONFLICT arithmetic, not politeness).
+ *     40/min is the binge-tap limit since the series pivot (Phase 3).
  *   - different users don't share windows
  *   - promo guessing: attempt #11 in the hour is rate_limited BEFORE the
  *     code lookup, so a valid code late in a guessing spree is also refused
@@ -98,14 +99,14 @@ try {
   `)
   videoId = (await sql(`select id from public.videos where slug = 'rl-test-video'`))[0].id
 
-  h.section('Unlock limit under genuine concurrency (limit 20/min)')
+  h.section('Unlock limit under genuine concurrency (limit 40/min since the pivot)')
   {
     const results = await Promise.all(
-      Array.from({ length: 40 }, () => fn('video-unlock', alice.jwt, { videoId })),
+      Array.from({ length: 60 }, () => fn('video-unlock', alice.jwt, { videoId })),
     )
     const passed = results.filter((r) => r.status === 200).length
     const limited = results.filter((r) => r.status === 429).length
-    h.check('exactly 20 of 40 concurrent calls pass', passed === 20, `${passed} passed`)
+    h.check('exactly 40 of 60 concurrent calls pass', passed === 40, `${passed} passed`)
     h.check('exactly 20 are 429 rate_limited', limited === 20 &&
       results.find((r) => r.status === 429)?.data?.error === 'rate_limited', `${limited} limited`)
   }

@@ -29,6 +29,9 @@ async function cleanup() {
     delete from public.video_daily_stats where video_id in (select id from public.videos where slug like 'an-test-%');
     delete from public.videos where slug like 'an-test-%';
     delete from public.profiles where user_id in ('${U1}','${U2}');
+    -- the probe day's platform row is synthetic; leaving it would show a
+    -- phantom 2020 blip on the admin dashboard
+    delete from public.platform_daily_stats where day = '2020-06-15';
   `)
 }
 
@@ -37,10 +40,13 @@ console.log('\nAnalytics rollup - seeded known data\n')
 try {
   await cleanup()
 
-  // "Yesterday" in the platform's timezone, matching the rollup's default.
-  const tzRow = await sql(`select value #>> '{}' as tz from public.platform_settings where key = 'platform_timezone'`)
-  const tz = tzRow[0]?.tz ?? 'UTC'
-  const day = (await sql(`select ((now() at time zone '${tz}')::date - 1)::text as d`))[0].d
+  // A FIXED, ancient probe day — deliberately not "yesterday". The suite
+  // asserts platform-WIDE absolutes (DAU, watch_seconds, videos_published),
+  // and yesterday stopped being quiet the moment the platform had real
+  // traffic: on 2026-08-04 this suite failed against launch-day activity from
+  // 08-03. A day years in the past is quiet forever, and rollup_daily_stats
+  // takes an explicit day precisely so any day can be (re)computed.
+  const day = '2020-06-15'
 
   await sql(`
     insert into public.profiles (user_id, email) values
@@ -115,6 +121,16 @@ try {
 
   h.section('Trending')
   {
+    // The MV only reads the last 7 days, and the rollup above targeted the
+    // ancient probe day — so give trending its own RECENT rows. These are
+    // per-VIDEO assertions scoped to our seeded ids, so recent days are safe
+    // in a way the platform-wide absolutes above are not.
+    await sql(`
+      insert into public.video_daily_stats (day, video_id, views, unique_viewers, watch_seconds, credits_earned, completions) values
+        (current_date - 1, '${vids['an-test-free']}', 1, 1, 120, 0, 0),
+        (current_date - 1, '${vids['an-test-paid']}', 2, 2, 155, 1, 1)
+      on conflict (day, video_id) do update set views = excluded.views
+    `)
     await sql(`select public.refresh_trending()`)
     const trending = await sql(`
       select title, trend_score from public.mv_trending_videos

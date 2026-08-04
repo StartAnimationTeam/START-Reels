@@ -74,7 +74,7 @@ export function WalletActions({
             {claimedToday ? 'Claimed today ✓' : `Claim today’s ${creditLabel(rewardAmount)}`}
           </button>
           {!claimedToday && (
-            <span className="text-xs text-ink-muted">Free credits, once a day.</span>
+            <span className="text-xs text-ink-muted">Free coins, once a day — streaks pay more.</span>
           )}
         </div>
       )}

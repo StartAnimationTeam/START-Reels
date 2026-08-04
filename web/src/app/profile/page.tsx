@@ -104,6 +104,7 @@ export default async function ProfilePage() {
       <nav className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           { href: '/profile/wallet', label: 'My Wallet' },
+          { href: '/rewards', label: 'Earn Rewards' },
           { href: '/profile/history', label: 'Watch history' },
           { href: '/my-list', label: 'My List' },
           { href: '/profile/settings', label: 'Settings' },
