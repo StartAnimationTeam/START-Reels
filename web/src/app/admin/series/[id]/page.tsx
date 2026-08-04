@@ -108,6 +108,7 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
 
         <SeriesActions
           seriesId={series.id}
+          title={series.title}
           status={series.status}
           isFeatured={series.is_featured}
           viewerIsAdmin={viewerIsAdmin}

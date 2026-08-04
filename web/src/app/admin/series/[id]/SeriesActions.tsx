@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
+import { SchedulePicker } from '@/components/SchedulePicker'
 import { useAdminApi } from '@/lib/admin'
 import { comingSoonLabel, errorLabel } from '@/lib/labels'
 
@@ -20,12 +21,14 @@ import { comingSoonLabel, errorLabel } from '@/lib/labels'
  */
 export function SeriesActions({
   seriesId,
+  title,
   status,
   isFeatured,
   viewerIsAdmin,
   scheduledPublishAt,
 }: {
   seriesId: string
+  title: string
   status: string
   isFeatured: boolean
   viewerIsAdmin: boolean
@@ -36,18 +39,19 @@ export function SeriesActions({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState(false)
-  const [scheduling, setScheduling] = useState(false)
-  const [when, setWhen] = useState('')
+  const [pickerOpen, setPickerOpen] = useState(false)
 
-  const run = async (fn: () => Promise<unknown>) => {
+  const run = async (fn: () => Promise<unknown>): Promise<boolean> => {
     setBusy(true)
     setError(null)
     try {
       await fn()
       setConfirmRemove(false)
       router.refresh()
+      return true
     } catch (err) {
       setError(err instanceof Error ? err.message : 'unknown_error')
+      return false
     } finally {
       setBusy(false)
     }
@@ -77,52 +81,22 @@ export function SeriesActions({
         )}
 
         {status !== 'published' && status !== 'removed' && (
-          scheduling ? (
-            <>
-              <input
-                type="datetime-local"
-                value={when}
-                onChange={(e) => setWhen(e.target.value)}
-                className="rounded-lg border border-line-strong bg-surface-muted px-2 py-1 text-xs focus:border-brand focus:outline-none"
-                aria-label="Publish date and time"
-              />
+          <>
+            <button disabled={busy} onClick={() => setPickerOpen(true)} className={btn}>
+              {scheduledPublishAt ? 'Reschedule…' : 'Schedule…'}
+            </button>
+            {scheduledPublishAt && (
               <button
-                disabled={busy || !when || new Date(when).getTime() <= Date.now()}
+                disabled={busy}
                 onClick={() =>
-                  void run(() =>
-                    api.series('update_series', {
-                      seriesId,
-                      scheduledPublishAt: new Date(when).toISOString(),
-                    }),
-                  ).then(() => setScheduling(false))
+                  void run(() => api.series('update_series', { seriesId, scheduledPublishAt: null }))
                 }
-                className="rounded-md px-2.5 py-1 text-xs font-medium text-white disabled:opacity-40"
-                style={{ background: 'var(--brand-gradient)' }}
+                className={btn}
               >
-                Set timer
+                Clear timer
               </button>
-              <button disabled={busy} onClick={() => setScheduling(false)} className={btn}>
-                Cancel
-              </button>
-            </>
-          ) : (
-            <>
-              <button disabled={busy} onClick={() => setScheduling(true)} className={btn}>
-                {scheduledPublishAt ? 'Reschedule…' : 'Schedule…'}
-              </button>
-              {scheduledPublishAt && (
-                <button
-                  disabled={busy}
-                  onClick={() =>
-                    void run(() => api.series('update_series', { seriesId, scheduledPublishAt: null }))
-                  }
-                  className={btn}
-                >
-                  Clear timer
-                </button>
-              )}
-            </>
-          )
+            )}
+          </>
         )}
 
         {status === 'published' && (
@@ -158,6 +132,18 @@ export function SeriesActions({
       </div>
 
       {error && <p className="text-sm" style={{ color: 'var(--danger)' }}>{errorLabel(error)}</p>}
+
+      <SchedulePicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        busy={busy}
+        title={title}
+        onConfirm={(when) =>
+          void run(() =>
+            api.series('update_series', { seriesId, scheduledPublishAt: when.toISOString() }),
+          ).then((ok) => ok && setPickerOpen(false))
+        }
+      />
     </div>
   )
 }
