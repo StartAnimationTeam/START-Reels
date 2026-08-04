@@ -64,7 +64,7 @@ async function fn(name, { token, body, headers = {} } = {}) {
 
 console.log('\nPaywall over HTTP - deployed Edge Functions\n')
 
-let user, sessionJwt, videoId, freeVideoId
+let user, sessionJwt, videoId, freeVideoId, fakeGuid
 
 async function cleanup() {
   if (user) {
@@ -101,7 +101,7 @@ try {
     on conflict (user_id) do nothing;
     select public.grant_credits('${user.id}', 5, 'admin_grant', null, null, 'watch', '${USER_TAG}-seed', '{}'::jsonb);
     insert into public.videos (title, slug, creator_id, status, access_tier, credit_cost, duration_seconds, published_at, provider_asset_id) values
-      ('PB Premium', 'pbhttp-premium', 'pb_creator', 'published', 'premium', 1, 300, now(), 'fake-guid-${Date.now()}'),
+      ('PB Premium', 'pbhttp-premium', 'pb_creator', 'published', 'premium', 1, 300, now(), '${(fakeGuid = `fake-guid-${Date.now()}`)}'),
       ('PB Free',    'pbhttp-free',    'pb_creator', 'published', 'free',    0, 300, now(), null);
   `)
   const vids = await sql(`select slug, id from public.videos where slug like 'pbhttp-%'`)
@@ -151,14 +151,23 @@ try {
     // Bunny creds are pending, so the LAST step 503s — but the paywall and the
     // session start have already run for real by then.
     const play = await fn('video-playback', { token: sessionJwt, body: { videoId, device: 'test' } })
-    h.check('playback WITH unlock reaches the signing step (503 bunny_not_configured)',
-      play.status === 503 && play.data?.error === 'bunny_not_configured',
+    // Originally this expected 503 bunny_not_configured (creds were pending
+    // when the suite was written). Bunny is configured on the live functions
+    // now, so the honest — and stronger — assertion is the signed URL itself:
+    // a bcdn token PATH-scoped to this GUID (trap #2: the path, not just the
+    // manifest).
+    const url = String(play.data?.url ?? '')
+    h.check('playback WITH unlock returns a path-scoped signed URL',
+      play.status === 200 &&
+        url.includes('bcdn_token=') &&
+        url.includes(`token_path=%2F${fakeGuid}%2F`) &&
+        Boolean(play.data?.sessionId),
       `HTTP ${play.status}: ${JSON.stringify(play.data)}`)
 
     const sessions = await sql(`
       select count(*)::int as n from public.watch_sessions where user_id = '${user.id}'
     `)
-    h.check('...and a watch session WAS started before the 503', sessions[0].n === 1, `${sessions[0].n}`)
+    h.check('...and a watch session WAS started', sessions[0].n === 1, `${sessions[0].n}`)
   }
 
   // ── free video ────────────────────────────────────────────────────────

@@ -1,19 +1,16 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
-import { FavoriteButton } from '@/components/FavoriteButton'
-import { ReportButton } from '@/components/ReportButton'
 import { currentUser } from '@/lib/auth'
-import { isFavorited } from '@/lib/catalog'
 import { createAnonSupabase, createServerSupabase } from '@/lib/supabase-server'
-import { durationLabel, tierCostLabel } from '@/lib/labels'
-import { WatchGate } from './WatchGate'
+import { WatchExperience, type EpisodeNav } from './WatchExperience'
 
 /**
- * Server component: loads the video's PUBLIC metadata through RLS and decides
- * which client state to hand off. The catalog row it reads cannot contain
- * provider_asset_id — the column grant in 0005 makes that a database
- * guarantee, not a discipline.
+ * Server component: loads the episode, its series and its siblings through
+ * RLS and hands the client everything it proved — entitlement map, resume
+ * position, coin balance. The catalog rows it reads cannot contain
+ * provider_asset_id (the 0005 column grant), and every claim the client
+ * could tamper with is re-proved by unlock_video / video-playback.
  */
 
 interface Props {
@@ -36,67 +33,88 @@ export default async function WatchPage({ params }: Props) {
 
   const { data: video } = await supabase
     .from('videos')
-    .select(
-      'id, title, description, access_tier, credit_cost, duration_seconds, thumbnail_url, status, creator_id, published_at',
-    )
+    .select('id, title, thumbnail_url, series_id, episode_number, access_tier, credit_cost')
     .eq('id', id)
     .maybeSingle()
 
-  // RLS already hid unpublished videos from everyone but the creator/staff,
-  // so a null here is genuinely "not for you" — 404, not 403: revealing that a
-  // hidden video EXISTS is itself a leak.
-  if (!video) notFound()
+  // RLS already hid unpublished episodes from everyone but the creator/staff,
+  // so a null here is genuinely "not for you" — 404, not 403.
+  if (!video || !video.series_id) notFound()
 
-  // Does the viewer already hold a live entitlement, and is this saved? Both
-  // read through RLS — a signed-out visitor simply gets neither.
-  let hasEntitlement = false
-  let favorited = false
+  const [{ data: series }, { data: siblings }] = await Promise.all([
+    supabase
+      .from('series')
+      .select('id, slug, title, free_episode_count, episode_credit_cost, total_episodes')
+      .eq('id', video.series_id)
+      .maybeSingle(),
+    supabase
+      .from('videos')
+      .select('id, episode_number')
+      .eq('series_id', video.series_id)
+      .eq('status', 'published')
+      .is('deleted_at', null)
+      .order('episode_number', { ascending: true }),
+  ])
+  if (!series) notFound()
+
+  const episodes = siblings ?? []
+  const myIndex = episodes.findIndex((e) => e.id === video.id)
+
+  // Entitlements, resume and balance — the viewer's own rows through RLS.
+  let unlockedIds = new Set<string>()
+  let resumeAt = 0
+  let balance = 0
   if (userId) {
-    const [{ data: ents }, fav] = await Promise.all([
+    const now = new Date().toISOString()
+    const [entRes, historyRes, balanceRes] = await Promise.all([
       supabase
         .from('video_entitlements')
-        .select('id')
-        .eq('video_id', id)
-        .is('revoked_at', null)
-        .gt('expires_at', new Date().toISOString())
-        .limit(1),
-      isFavorited(supabase, id),
+        .select('video_id')
+        .in('video_id', episodes.map((e) => e.id))
+        .gt('expires_at', now)
+        .is('revoked_at', null),
+      supabase
+        .from('watch_history')
+        .select('last_position_seconds, completed')
+        .eq('video_id', video.id)
+        .maybeSingle(),
+      // available_balance, never committed_balance (trap #18).
+      supabase.from('credit_balances').select('available_balance').maybeSingle(),
     ])
-    hasEntitlement = Boolean(ents?.length)
-    favorited = fav
+    unlockedIds = new Set((entRes.data ?? []).map((e) => e.video_id))
+    // Resume mid-episode; a finished episode restarts from the top.
+    resumeAt = historyRes.data?.completed ? 0 : Number(historyRes.data?.last_position_seconds ?? 0)
+    balance = Number(balanceRes.data?.available_balance ?? 0)
   }
 
-  return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-      <WatchGate
-        videoId={video.id}
-        title={video.title}
-        tier={video.access_tier}
-        creditCost={video.credit_cost}
-        thumbnailUrl={video.thumbnail_url}
-        signedIn={Boolean(userId)}
-        initiallyEntitled={hasEntitlement}
-      />
+  const nav = (e: { id: string; episode_number: number | null } | undefined): EpisodeNav | null =>
+    e
+      ? {
+          id: e.id,
+          episodeNumber: e.episode_number ?? 0,
+          open: (e.episode_number ?? 0) <= series.free_episode_count || unlockedIds.has(e.id),
+        }
+      : null
 
-      <div className="mt-6 animate-rise">
-        <div className="flex items-start justify-between gap-4">
-          <h1 className="text-2xl font-semibold tracking-tight">{video.title}</h1>
-          {userId && <FavoriteButton videoId={video.id} initiallyFavorited={favorited} />}
-        </div>
-        <p className="mt-1 text-sm text-ink-muted">
-          {tierCostLabel(video.access_tier, video.credit_cost)}
-          {' · '}
-          {durationLabel(video.duration_seconds)}
-        </p>
-        {video.description && (
-          <p className="mt-4 max-w-3xl whitespace-pre-line text-ink-secondary">{video.description}</p>
-        )}
-        {userId && (
-          <div className="mt-6">
-            <ReportButton videoId={video.id} />
-          </div>
-        )}
-      </div>
-    </div>
+  const myNumber = video.episode_number ?? 0
+  const episodeCost = myNumber <= series.free_episode_count ? 0 : series.episode_credit_cost
+
+  return (
+    <WatchExperience
+      videoId={video.id}
+      episodeNumber={myNumber}
+      seriesTitle={series.title}
+      seriesSlug={series.slug}
+      totalEpisodes={series.total_episodes}
+      episodeCost={episodeCost}
+      lockedEpisodeCost={series.episode_credit_cost}
+      thumbnailUrl={video.thumbnail_url}
+      signedIn={Boolean(userId)}
+      initiallyEntitled={unlockedIds.has(video.id)}
+      resumeAt={resumeAt}
+      balance={balance}
+      prev={nav(myIndex > 0 ? episodes[myIndex - 1] : undefined)}
+      next={nav(myIndex >= 0 ? episodes[myIndex + 1] : undefined)}
+    />
   )
 }

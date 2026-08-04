@@ -26,16 +26,49 @@ export function StreamPlayer({
   sessionId,
   poster,
   onExpired,
+  onEnded,
+  vertical = false,
+  autoPlay = false,
+  muted = false,
+  loop = false,
+  hideControls = false,
+  startAt,
+  className,
 }: {
   src: string
   sessionId: string
   poster?: string | null
   onExpired?: () => void
+  /** Fires when the episode finishes — the watch page auto-advances on it. */
+  onEnded?: () => void
+  /** 9:16 full-height framing for episodes; default keeps the 16:9 card. */
+  vertical?: boolean
+  /** Feed slides autoplay MUTED (mobile browsers refuse sound otherwise). */
+  autoPlay?: boolean
+  muted?: boolean
+  loop?: boolean
+  hideControls?: boolean
+  /** Resume position in seconds, applied once metadata is known. */
+  startAt?: number
+  className?: string
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null)
 
   useHeartbeat(sessionId, videoEl)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !startAt || startAt <= 0) return
+    // Seek once duration is known; setting currentTime before metadata is a
+    // silent no-op in some engines.
+    const seek = () => {
+      if (video.duration && startAt < video.duration - 2) video.currentTime = startAt
+    }
+    if (video.readyState >= 1) seek()
+    else video.addEventListener('loadedmetadata', seek, { once: true })
+    return () => video.removeEventListener('loadedmetadata', seek)
+  }, [startAt, src])
 
   useEffect(() => {
     const video = videoRef.current
@@ -93,10 +126,19 @@ export function StreamPlayer({
   return (
     <video
       ref={videoRef}
-      controls
+      controls={!hideControls}
       playsInline
+      autoPlay={autoPlay}
+      muted={muted}
+      loop={loop}
+      onEnded={onEnded}
       poster={poster ?? undefined}
-      className="aspect-video w-full rounded-xl bg-black"
+      className={
+        className ??
+        (vertical
+          ? 'h-full w-full bg-black object-contain'
+          : 'aspect-video w-full rounded-xl bg-black')
+      }
       // Downloading is pointless against HLS segments but removing the menu
       // item keeps honest people honest and the UI consistent.
       controlsList="nodownload"

@@ -47,7 +47,7 @@ export async function CreditBadge() {
 
   return (
     <Link
-      href="/me/credits"
+      href="/profile/wallet"
       title="Your spendable credits"
       className="flex items-center gap-1.5 rounded-full border border-line-strong bg-surface-muted px-3 py-1 text-xs font-medium text-ink-secondary transition-colors hover:border-brand hover:text-ink"
     >
