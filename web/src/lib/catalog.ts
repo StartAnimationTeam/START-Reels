@@ -262,6 +262,12 @@ export async function seriesInCategory(supabase: Client, categoryId: string, lim
     .filter((s): s is CardSeries => Boolean(s))
 }
 
+/** Every facet tag, for pickers. The tags table is public-select. */
+export async function allTags(supabase: Client): Promise<{ id: string; slug: string; name: string }[]> {
+  const { data } = await supabase.from('tags').select('id, slug, name').order('name', { ascending: true })
+  return data ?? []
+}
+
 /** Facet chips for a series ("Secret Baby", "Revenge", …). */
 export async function seriesFacets(supabase: Client, seriesId: string): Promise<{ id: string; slug: string; name: string }[]> {
   const { data } = await supabase

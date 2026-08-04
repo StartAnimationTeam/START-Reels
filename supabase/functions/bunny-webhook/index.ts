@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     // upload from the dashboard, or a forged body naming a random GUID.
     const { data: row } = await db
       .from('videos')
-      .select('id, status, creator_id')
+      .select('id, status, creator_id, series_id')
       .eq('provider_asset_id', guid)
       .maybeSingle()
 
@@ -166,6 +166,18 @@ Deno.serve(async (req) => {
         .update({ status: 'completed' })
         .eq('provider_upload_id', guid)
         .eq('status', 'pending')
+
+      // The user-side thumbnail guarantee: a series with no cover borrows
+      // this episode's thumbnail so its card never renders blank. FILL-IF-
+      // NULL only — a real 9:16 poster set through series-manage is never
+      // overwritten, and webhook retries stay idempotent for free.
+      if (thumb && row.series_id) {
+        await db
+          .from('series')
+          .update({ cover_url: thumb })
+          .eq('id', row.series_id)
+          .is('cover_url', null)
+      }
     } else if (state === 'failed') {
       await db
         .from('videos')

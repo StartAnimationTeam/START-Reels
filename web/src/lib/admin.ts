@@ -17,6 +17,8 @@ const FN_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1`
 
 export interface UploadTicket {
   videoId: string
+  /** Present on episode uploads: the number the server assigned. */
+  episodeNumber?: number
   upload: {
     tusEndpoint: string
     headers: {
@@ -49,12 +51,25 @@ export function useAdminApi() {
   )
 
   return {
+    // With seriesId this mints an EPISODE: the server auto-assigns the next
+    // number when episodeNumber is omitted (NOT parallel-safe — create
+    // tickets strictly one at a time) and overwrites tier/cost with the
+    // series-resolved price, so episode callers omit them.
     createUpload: (meta: {
       title: string
       description?: string
-      accessTier: AccessTier
-      creditCost: number
+      accessTier?: AccessTier
+      creditCost?: number
+      seriesId?: string
+      episodeNumber?: number
     }) => call<UploadTicket>('video-upload', meta),
+
+    series: (action: string, extra: Record<string, unknown> = {}) =>
+      call<{
+        ok: true
+        series?: { id: string } & Record<string, unknown>
+        entitlements_revoked?: number
+      }>('series-manage', { action, ...extra }),
 
     video: (action: string, videoId: string, extra: Record<string, unknown> = {}) =>
       call<{ ok: true }>('admin-videos', { action, videoId, ...extra }),

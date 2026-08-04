@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { UploadForm } from '@/components/UploadForm'
 
@@ -7,8 +8,15 @@ export const metadata: Metadata = { title: 'Upload' }
 export default function AdminUploadPage() {
   return (
     <div className="max-w-2xl">
-      <h2 className="text-lg font-semibold tracking-tight">Upload a video</h2>
+      <h2 className="text-lg font-semibold tracking-tight">Upload a standalone video</h2>
       <p className="mt-1 text-sm text-ink-muted">
+        Uploading episodes?{' '}
+        <Link href="/admin/series" className="text-ink underline hover:text-white">
+          Use Series
+        </Link>{' '}
+        — it queues whole seasons, numbers them and prices them automatically.
+      </p>
+      <p className="mt-2 text-sm text-ink-muted">
         The file goes straight from your browser to Bunny over a resumable
         connection — a dropped network picks up where it left off. Transcoding
         starts automatically; the video publishes itself when encoding

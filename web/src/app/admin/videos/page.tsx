@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 
 import { VideoActions } from './VideoActions'
 import { createServerSupabase } from '@/lib/supabase-server'
-import { durationLabel, tierCostLabel, VIDEO_STATUS_LABELS } from '@/lib/labels'
+import { durationLabel, episodeLabel, tierCostLabel, VIDEO_STATUS_LABELS } from '@/lib/labels'
 
 export const metadata: Metadata = { title: 'Videos · Admin' }
 
@@ -16,7 +16,7 @@ export default async function AdminVideosPage() {
 
   const { data: videos } = await supabase
     .from('videos')
-    .select('id, title, status, access_tier, credit_cost, duration_seconds, is_featured, featured_rank, view_count, created_at, rejection_reason')
+    .select('id, title, status, access_tier, credit_cost, duration_seconds, is_featured, featured_rank, view_count, created_at, rejection_reason, series_id, episode_number')
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -47,6 +47,11 @@ export default async function AdminVideosPage() {
               {rows.map((video) => (
                 <tr key={video.id} className="bg-background">
                   <td className="max-w-[280px] truncate px-4 py-2.5 text-ink" title={video.title}>
+                    {video.series_id && video.episode_number != null && (
+                      <span className="mr-1.5 rounded border border-line-strong px-1 py-0.5 text-[10px] tabular-nums text-ink-muted">
+                        {episodeLabel(video.episode_number)}
+                      </span>
+                    )}
                     {video.title}
                     {video.rejection_reason && (
                       <span className="block truncate text-xs text-ink-faint" title={video.rejection_reason}>

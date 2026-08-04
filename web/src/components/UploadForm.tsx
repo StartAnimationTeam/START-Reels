@@ -1,10 +1,10 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useRef, useState } from 'react'
-import * as tus from 'tus-js-client'
+import { useState } from 'react'
 
 import { useAdminApi } from '@/lib/admin'
+import { uploadToBunny } from '@/lib/upload'
 import { errorLabel } from '@/lib/labels'
 import type { AccessTier } from '@/lib/database.types'
 
@@ -48,7 +48,6 @@ export function UploadForm({
   const [cost, setCost] = useState(0)
   const [file, setFile] = useState<File | null>(null)
   const [phase, setPhase] = useState<Phase>({ kind: 'form' })
-  const uploadRef = useRef<tus.Upload | null>(null)
 
   const start = async () => {
     if (!file || !title.trim()) return
@@ -72,39 +71,17 @@ export function UploadForm({
       return
     }
 
-    const upload = new tus.Upload(file, {
-      endpoint: ticket.upload.tusEndpoint,
-      retryDelays: [0, 3000, 8000, 15000, 30000],
-      chunkSize: 50 * 1024 * 1024,
-      headers: {
-        AuthorizationSignature: ticket.upload.headers.AuthorizationSignature,
-        AuthorizationExpire: String(ticket.upload.headers.AuthorizationExpire),
-        VideoId: ticket.upload.headers.VideoId,
-        LibraryId: ticket.upload.headers.LibraryId,
-      },
-      metadata: {
-        filetype: file.type,
-        title: title.trim(),
-      },
-      onProgress: (sent, total) => {
-        setPhase({ kind: 'uploading', pct: Math.round((sent / total) * 100) })
-      },
-      onError: (err) => {
-        setPhase({ kind: 'error', code: 'upload_failed', detail: err.message })
-      },
-      onSuccess: () => {
-        // Bytes are with Bunny. From here the pipeline is autonomous:
-        // transcode → webhook → published (staff) or pending_review (creator).
-        setPhase({ kind: 'processing' })
-        setTimeout(() => router.push(redirectTo), 1800)
-      },
-    })
-    uploadRef.current = upload
+    try {
+      await uploadToBunny(file, ticket, (pct) => setPhase({ kind: 'uploading', pct }))
+    } catch (err) {
+      setPhase({ kind: 'error', code: 'upload_failed', detail: err instanceof Error ? err.message : undefined })
+      return
+    }
 
-    // Resume a previous attempt of the same file if one exists.
-    const previous = await upload.findPreviousUploads()
-    if (previous.length > 0) upload.resumeFromPreviousUpload(previous[0])
-    upload.start()
+    // Bytes are with Bunny. From here the pipeline is autonomous:
+    // transcode → webhook → published (staff) or pending_review (creator).
+    setPhase({ kind: 'processing' })
+    setTimeout(() => router.push(redirectTo), 1800)
   }
 
   if (phase.kind === 'processing') {
