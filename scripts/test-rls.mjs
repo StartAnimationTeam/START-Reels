@@ -305,9 +305,100 @@ async function main() {
       }
     }
 
+    // -- 2c. series: catalog visibility + follows + progress --------------
+    console.log('\nSeries (catalog visibility, follows, progress view):')
+    {
+      // A draft series exists (seeded via service role). Published rows are
+      // public; drafts must be invisible to everyone but the creator/staff.
+      const draft = await svc('series', {
+        method: 'POST',
+        prefer: 'return=representation',
+        body: {
+          slug: 'rls-test-draft-series',
+          title: 'RLS draft series',
+          creator_id: 'rls_test_ghost_creator',
+          status: 'draft',
+        },
+      })
+      const draftId = draft.data?.[0]?.id
+      if (!draftId) {
+        check('seeded draft series for visibility test', false, JSON.stringify(draft.data))
+      } else {
+        const anonSees = await rest(`series?id=eq.${draftId}&select=id`, {})
+        check('anon cannot see a draft series', (anonSees.data ?? []).length === 0, JSON.stringify(anonSees.data))
+
+        const bobSees = await rest(`series?id=eq.${draftId}&select=id`, { token: B })
+        check('Bob cannot see a draft series either', (bobSees.data ?? []).length === 0, JSON.stringify(bobSees.data))
+
+        const pub = await rest(`series?status=eq.published&select=id&limit=1`, {})
+        check(
+          'anon CAN browse published series (top of the funnel)',
+          Array.isArray(pub.data) && pub.data.length > 0,
+          `saw ${JSON.stringify(pub.data)} - is the catalog seeded?`,
+        )
+
+        // Follows: same client-writable contract as favorites.
+        const followSeries = await svc('series?status=eq.published&select=id&limit=1')
+        const followId = followSeries.data?.[0]?.id
+        const mine = await rest('series_follows', {
+          token: B,
+          method: 'POST',
+          body: { user_id: bob.id, series_id: followId },
+        })
+        check('Bob CAN follow a series as himself', mine.ok, `HTTP ${mine.status}: ${JSON.stringify(mine.data)}`)
+
+        const forged = await rest('series_follows', {
+          token: B,
+          method: 'POST',
+          body: { user_id: alice.id, series_id: followId },
+        })
+        check("Bob cannot write a follow onto Alice's account", !forged.ok, `HTTP ${forged.status} - INSERT SUCCEEDED`)
+
+        const readBack = await rest('series_follows?select=user_id', { token: A })
+        check(
+          "Alice sees none of Bob's follows",
+          (readBack.data ?? []).length === 0,
+          `saw ${(readBack.data ?? []).length}`,
+        )
+
+        const del = await rest(`series_follows?series_id=eq.${followId}`, { token: B, method: 'DELETE' })
+        check('Bob can unfollow', del.ok, `HTTP ${del.status}`)
+
+        // series_progress runs as the CALLER (security_invoker). Give Bob a
+        // watch_history row via the service role, then prove the view scopes:
+        // this is the query shape that leaked credit_balances before 0004,
+        // testable only through the view as a real user.
+        const epRow = await svc(`videos?series_id=eq.${followId}&select=id&limit=1`)
+        const epId = epRow.data?.[0]?.id
+        if (epId) {
+          await svc('watch_history', {
+            method: 'POST',
+            prefer: 'resolution=merge-duplicates',
+            body: { user_id: bob.id, video_id: epId, last_position_seconds: 12, total_seconds_watched: 12, watch_count: 1 },
+          })
+          const bobSeesOwn = await rest('series_progress?select=series_id,user_id', { token: B })
+          const bobRows = Array.isArray(bobSeesOwn.data) ? bobSeesOwn.data : []
+          check(
+            'Bob sees his own series progress through the view',
+            bobRows.some((r) => r.series_id === followId && r.user_id === bob.id),
+            JSON.stringify(bobSeesOwn.data),
+          )
+          const aliceSees = await rest('series_progress?select=user_id', { token: A })
+          const aliceRows = Array.isArray(aliceSees.data) ? aliceSees.data : []
+          check(
+            "Alice sees none of Bob's progress (security_invoker holds)",
+            !aliceRows.some((r) => r.user_id === bob.id),
+            JSON.stringify(aliceSees.data),
+          )
+        } else {
+          check('an episode exists for the progress test', false, 'published series has no video rows')
+        }
+      }
+    }
+
     // -- 3. anonymous access ----------------------------------------------
     console.log('\nAnonymous access (publishable key only, no user token):')
-    for (const table of ['profiles', 'credit_ledger', 'user_roles', 'audit_logs', 'favorites']) {
+    for (const table of ['profiles', 'credit_ledger', 'user_roles', 'audit_logs', 'favorites', 'series_follows']) {
       const r = await rest(`${table}?select=*&limit=5`, {})
       const n = Array.isArray(r.data) ? r.data.length : 0
       check(`anon reads nothing from ${table}`, n === 0, `saw ${n} rows`)
@@ -389,8 +480,11 @@ async function main() {
     for (const s of [aliceSession, bobSession]) {
       if (s) await clerk(`/sessions/${s.id}/revoke`, { method: 'POST' }).catch(() => {})
     }
+    await svc(`series?slug=eq.rls-test-draft-series`, { method: 'DELETE' }).catch(() => {})
     for (const u of [alice, bob]) {
       if (!u) continue
+      await svc(`series_follows?user_id=eq.${u.id}`, { method: 'DELETE' }).catch(() => {})
+      await svc(`watch_history?user_id=eq.${u.id}`, { method: 'DELETE' }).catch(() => {})
       await svc(`credit_ledger?user_id=eq.${u.id}`, { method: 'DELETE' }).catch(() => {})
       await svc(`notification_preferences?user_id=eq.${u.id}`, { method: 'DELETE' }).catch(() => {})
       await svc(`profiles?user_id=eq.${u.id}`, { method: 'DELETE' }).catch(() => {})

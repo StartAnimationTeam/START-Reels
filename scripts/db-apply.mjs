@@ -98,7 +98,11 @@ for (const file of files) {
   // and a corrupted comment inside a $$-quoted function body is a syntax error
   // a long way from its cause.
   const body = readFileSync(join(MIGRATIONS, file), 'utf8')
-  const hash = createHash('sha256').update(body).digest('hex').slice(0, 16)
+  // Hash on normalized line endings. git's autocrlf hands Windows checkouts
+  // CRLF for the very bytes a Linux checkout reads as LF — without this, a
+  // machine move flags every applied migration as "CHANGED SINCE" (which is
+  // exactly what happened on 2026-08-04).
+  const hash = createHash('sha256').update(body.replace(/\r\n/g, '\n')).digest('hex').slice(0, 16)
   const prev = applied.get(file)
 
   if (statusOnly) {

@@ -41,6 +41,7 @@ export type VideoStatus =
   | 'rejected'
   | 'removed'
 export type AccessTier = 'free' | 'premium' | 'exclusive'
+export type SeriesStatus = 'draft' | 'published' | 'removed'
 export type EntitlementSource =
   | 'purchase'
   | 'free_tier'
@@ -78,8 +79,62 @@ export interface Database {
           created_at: string
           updated_at: string
           deleted_at: string | null
+          series_id: string | null
+          episode_number: number | null
         }
         Insert: never
+        Update: never
+        Relationships: []
+      }
+      series: {
+        // search_tsv omitted from Row on purpose — selectable (FTS needs it in
+        // WHERE) but noise in results, matching the videos convention.
+        Row: {
+          id: string
+          slug: string
+          title: string
+          synopsis: string | null
+          cover_url: string | null
+          creator_id: string
+          status: SeriesStatus
+          free_episode_count: number
+          episode_credit_cost: number
+          is_members_only: boolean
+          total_episodes: number
+          is_featured: boolean
+          featured_rank: number | null
+          published_at: string | null
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      series_categories: {
+        Row: { series_id: string; category_id: string; is_primary: boolean }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      tags: {
+        Row: { id: string; slug: string; name: string; created_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      series_tags: {
+        Row: { series_id: string; tag_id: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      series_follows: {
+        Row: { user_id: string; series_id: string; created_at: string }
+        // Client-writable, favorites-shaped: RLS WITH CHECK pins user_id to
+        // the caller; the column grant excludes created_at.
+        Insert: { user_id: string; series_id: string }
         Update: never
         Relationships: []
       }
@@ -374,6 +429,17 @@ export interface Database {
           committed_balance: number
           pending_holds: number
           available_balance: number
+        }
+        Relationships: []
+      }
+      series_progress: {
+        Row: {
+          series_id: string
+          user_id: string
+          last_episode_number: number
+          last_position_seconds: number
+          last_episode_completed: boolean
+          last_watched_at: string
         }
         Relationships: []
       }

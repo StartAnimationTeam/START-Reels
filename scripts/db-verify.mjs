@@ -65,6 +65,10 @@ const EXPECTED = [
   'upload_sessions', 'video_entitlements', 'watch_sessions', 'watch_history',
   // Phase 3
   'favorites',
+  // Phase 4
+  'daily_reward_claims',
+  // Series pivot (0017)
+  'series', 'series_categories', 'series_tags', 'series_follows',
 ]
 
 const tables = await sql(`
@@ -162,14 +166,76 @@ check(
   `granted to: ${colGrant[0]?.grantees}`,
 )
 
-// ── the tier<->cost invariant ─────────────────────────────────────────────
+// ── the series episode columns ARE granted ────────────────────────────────
+// The inverse of the GUID check. 0005 revoked SELECT on videos wholesale and
+// granted back an allowlist, so a column added without its own grant is
+// silently invisible to clients — embedded selects omit it, explicit selects
+// error. Forgetting the grant is the failure mode; assert it positively.
+console.log('\nseries_id / episode_number are client-selectable:')
+for (const col of ['series_id', 'episode_number']) {
+  const grant = await sql(`
+    select array_to_string(array(
+      select grantee from information_schema.column_privileges
+      where table_schema = 'public' and table_name = 'videos'
+        and column_name = '${col}'
+        and privilege_type = 'SELECT'
+        and grantee in ('anon', 'authenticated')
+      order by grantee
+    ), ', ') as grantees
+  `)
+  check(
+    `videos.${col} SELECT-granted to anon + authenticated`,
+    grant[0]?.grantees === 'anon, authenticated',
+    `granted to: ${grant[0]?.grantees || 'nobody'}`,
+  )
+}
+
+// series.search_tsv must be selectable too — PostgREST requires SELECT on any
+// WHERE-clause column, so withholding it breaks .textSearch() (the 0008 lesson).
+const seriesTsv = await sql(`
+  select count(*)::int as n from information_schema.column_privileges
+  where table_schema = 'public' and table_name = 'series'
+    and column_name = 'search_tsv' and privilege_type = 'SELECT'
+    and grantee in ('anon', 'authenticated')
+`)
+check('series.search_tsv SELECT-granted (FTS works)', seriesTsv[0].n === 2, `${seriesTsv[0].n}/2 grants`)
+
+// ── the tier<->cost invariant (0017 shape) ────────────────────────────────
+// free is still welded to zero; the paid range widened to 1..20 so episode
+// cost snapshots fit. Probe all three edges.
 console.log('\nTier<->cost CHECK constraint:')
 const badTier = await sqlError(`
   insert into public.videos (title, slug, creator_id, access_tier, credit_cost)
   values ('bad', 'db-verify-bad-tier', 'db_verify', 'free', 3)
 `)
 check('a free video with a nonzero cost is refused', Boolean(badTier), 'INSERT SUCCEEDED')
+
+const zeroPremium = await sqlError(`
+  insert into public.videos (title, slug, creator_id, access_tier, credit_cost)
+  values ('bad', 'db-verify-bad-tier', 'db_verify', 'premium', 0)
+`)
+check('a premium video with zero cost is refused', Boolean(zeroPremium), 'INSERT SUCCEEDED')
+
+const widePremium = await sqlError(`
+  insert into public.videos (title, slug, creator_id, access_tier, credit_cost)
+  values ('ok', 'db-verify-bad-tier', 'db_verify', 'premium', 3)
+`)
+check('a premium video costing 3 is now allowed (widened range)', !widePremium, widePremium ?? '')
 await sql(`delete from public.videos where slug = 'db-verify-bad-tier'`)
+
+// ── one EP.n per series ───────────────────────────────────────────────────
+console.log('\nEpisode numbering:')
+const epProbe = await sql(`
+  select count(*)::int as n from pg_indexes
+  where schemaname = 'public' and indexname = 'videos_series_episode_idx'
+`)
+check('unique (series_id, episode_number) index exists', epProbe[0].n === 1)
+
+const orphans = await sql(`
+  select count(*)::int as n from public.videos
+  where series_id is null and deleted_at is null
+`)
+check('every live video belongs to a series (0018 backfill)', orphans[0].n === 0, `${orphans[0].n} orphan(s)`)
 
 // ── pg_cron sweep scheduled ───────────────────────────────────────────────
 console.log('\nNightly sweep:')
