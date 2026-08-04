@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 
-import { currentUser } from '@/lib/auth'
+import { currentUser, rolesOf } from '@/lib/auth'
 import { createAnonSupabase, createServerSupabase } from '@/lib/supabase-server'
 import { WatchExperience, type EpisodeSlide } from './WatchExperience'
 
@@ -44,7 +44,7 @@ export default async function WatchPage({ params }: Props) {
   const [{ data: series }, { data: siblings }] = await Promise.all([
     supabase
       .from('series')
-      .select('id, slug, title, free_episode_count, episode_credit_cost, total_episodes')
+      .select('id, slug, title, status, creator_id, free_episode_count, episode_credit_cost, total_episodes')
       .eq('id', video.series_id)
       .maybeSingle(),
     supabase
@@ -56,6 +56,21 @@ export default async function WatchPage({ params }: Props) {
       .order('episode_number', { ascending: true }),
   ])
   if (!series) notFound()
+
+  // An announced-unreleased series is a teaser, not a player. Direct links
+  // land on the series page (premiere date + Follow) instead of a wall of
+  // refused unlocks — unlock_video (0023) is the real gate; this is manners.
+  if (series.status !== 'published') {
+    let privileged = false
+    if (userId) {
+      const roles = await rolesOf(userId)
+      privileged =
+        series.creator_id === userId ||
+        roles.includes('moderator') ||
+        roles.includes('administrator')
+    }
+    if (!privileged) redirect(`/series/${series.slug}`)
+  }
 
   const episodes = siblings ?? []
   // The entry episode may be unpublished-but-creator-visible; if it isn't in

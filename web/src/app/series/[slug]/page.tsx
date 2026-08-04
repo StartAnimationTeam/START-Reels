@@ -12,6 +12,7 @@ import {
   seriesFacets,
   type SeriesProgressRow,
 } from '@/lib/catalog'
+import { rolesOf } from '@/lib/auth'
 import { comingSoonLabel, episodeLabel, seriesPricingLabel } from '@/lib/labels'
 import { createAnonSupabase, createServerSupabase } from '@/lib/supabase-server'
 
@@ -50,6 +51,21 @@ export default async function SeriesPage({
 
   const series = await seriesBySlug(supabase, slug)
   if (!series) notFound()
+
+  // Announced-but-unreleased: the page is a TEASER, not a menu. Episodes
+  // encode (and technically publish) ahead of the premiere, but only the
+  // creator and staff get to see the roster early — everyone else gets the
+  // date and the Follow button. unlock_video refuses early watching
+  // regardless (0023); this keeps the UI from promising what the server
+  // will refuse.
+  const announced = series.status === 'draft' && Boolean(series.scheduled_publish_at)
+  let privileged = false
+  if (announced && userId) {
+    const roles = await rolesOf(userId)
+    privileged =
+      series.creator_id === userId || roles.includes('moderator') || roles.includes('administrator')
+  }
+  const teaser = announced && !privileged
 
   const [episodes, facets] = await Promise.all([
     seriesEpisodes(supabase, series.id),
@@ -158,7 +174,7 @@ export default async function SeriesPage({
 
       {/* ── actions ───────────────────────────────────────────────────── */}
       <div className="mt-5 flex items-center gap-3">
-        {nextByProgress && (
+        {!teaser && nextByProgress && (
           <Link
             href={`/watch/${nextByProgress.id}`}
             className="flex-1 rounded-lg px-6 py-3 text-center text-sm font-semibold text-white shadow-[var(--shadow-brand)] transition-transform hover:scale-[1.01] sm:flex-none sm:px-10"
@@ -171,15 +187,30 @@ export default async function SeriesPage({
       </div>
 
       {/* ── episodes ──────────────────────────────────────────────────── */}
-      <h2 className="mt-8 text-lg font-semibold tracking-tight">Episodes</h2>
-      <div className="mt-4">
-        <EpisodeGrid
-          episodes={episodes}
-          freeEpisodeCount={series.free_episode_count}
-          unlockedIds={unlockedIds}
-          lastWatched={progress?.last_episode_number}
-        />
-      </div>
+      {teaser ? (
+        <p className="mt-8 rounded-xl border border-line bg-surface p-4 text-sm text-ink-muted">
+          Episodes unlock at the premiere{episodes.length > 0 ? ` — ${episodeLabel(episodes.length)} ready and waiting` : ''}.
+        </p>
+      ) : (
+        <>
+          <h2 className="mt-8 text-lg font-semibold tracking-tight">
+            Episodes
+            {announced && (
+              <span className="ml-2 rounded-full border border-line-strong px-2 py-0.5 text-xs font-normal text-ink-muted">
+                staff preview — hidden from viewers until the premiere
+              </span>
+            )}
+          </h2>
+          <div className="mt-4">
+            <EpisodeGrid
+              episodes={episodes}
+              freeEpisodeCount={series.free_episode_count}
+              unlockedIds={unlockedIds}
+              lastWatched={progress?.last_episode_number}
+            />
+          </div>
+        </>
+      )}
     </div>
   )
 }
