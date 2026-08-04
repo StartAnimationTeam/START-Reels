@@ -109,21 +109,23 @@ Deno.serve(async (req) => {
       .maybeSingle()
     const nextFree = (maxRow?.episode_number ?? 0) + 1
 
-    if (episodeNumber === null) {
-      episodeNumber = nextFree
-    } else if (episodeNumber < nextFree) {
+    // A definitely-assigned local: the compiler cannot track the outer `let`
+    // through the awaits below, and it's clearer anyway.
+    const epNumber = episodeNumber ?? nextFree
+    episodeNumber = epNumber
+    if (epNumber < nextFree) {
       const { data: clash } = await db
         .from('videos')
         .select('id')
         .eq('series_id', seriesId)
-        .eq('episode_number', episodeNumber)
+        .eq('episode_number', epNumber)
         .is('deleted_at', null)
         .maybeSingle()
       if (clash) return fail(req, 'episode_number_taken', 409)
     }
 
     // Display snapshot of the series-resolved price; 0019 is the truth.
-    if (episodeNumber <= series.free_episode_count || series.episode_credit_cost === 0) {
+    if (epNumber <= series.free_episode_count || series.episode_credit_cost === 0) {
       accessTier = 'free'
       creditCost = 0
     } else {
