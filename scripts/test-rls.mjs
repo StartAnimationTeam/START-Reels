@@ -182,8 +182,10 @@ async function main() {
       })
     }
 
-    // Alice gets credits; Bob deliberately gets none, so "Bob sees Alice's
-    // ledger" and "Bob sees nothing" are distinguishable outcomes.
+    // Alice gets an admin grant on top; Bob gets only whatever the signup
+    // webhook granted him. The 42-credit admin grant exists ONLY on Alice's
+    // ledger, so "Bob sees Alice's ledger" and "Bob sees only his own"
+    // stay distinguishable even though the webhook credits both users.
     const grant = await svc('rpc/grant_credits', {
       method: 'POST',
       body: {
@@ -226,11 +228,20 @@ async function main() {
     // -- 2. cross-user isolation ------------------------------------------
     console.log('\nCross-user isolation:')
     {
-      const r = await rest('credit_ledger?select=id,user_id,amount', { token: B })
+      const r = await rest('credit_ledger?select=id,user_id,amount,reason', { token: B })
       const rows = Array.isArray(r.data) ? r.data : []
       const leaked = rows.filter((x) => x.user_id === alice.id)
       check("Bob cannot read Alice's credit ledger", leaked.length === 0, `saw ${leaked.length} of her rows`)
-      check('Bob sees no ledger rows at all (he has none)', rows.length === 0, `saw ${rows.length}`)
+      // Bob legitimately owns a signup_grant row (the webhook fires for test
+      // users too). Anything beyond that - a foreign user_id, or the admin
+      // grant that was only ever written to Alice - is a leak.
+      const foreign = rows.filter((x) => x.user_id !== bob.id)
+      const notSignup = rows.filter((x) => x.reason !== 'signup_grant')
+      check(
+        "Bob's only ledger rows are his own signup grant",
+        foreign.length === 0 && notSignup.length === 0,
+        `${foreign.length} foreign, ${notSignup.length} non-signup: ${JSON.stringify(rows)}`,
+      )
     }
     {
       const r = await rest('credit_balances?select=user_id,available_balance', { token: B })
@@ -242,9 +253,20 @@ async function main() {
       )
     }
     {
+      // The signup webhook also credits Alice, so her balance is 42 plus a
+      // signup grant of whatever platform_settings says today. Compare her
+      // OWN read against the service role's view of the same row instead of
+      // hardcoding the sum - the property under test is that RLS lets her
+      // see her real balance, not what the signup grant happens to be.
+      const truth = await svc(`credit_balances?user_id=eq.${alice.id}&select=available_balance`)
+      const want = Number(truth.data?.[0]?.available_balance ?? NaN)
       const r = await rest('credit_balances?select=available_balance', { token: A })
       const bal = Number(r.data?.[0]?.available_balance ?? 0)
-      check('Alice CAN read her own balance, and it is 42', bal === 42, `got ${JSON.stringify(r.data)}`)
+      check(
+        'Alice CAN read her own balance, and it matches the service-role truth (incl. the 42 seeded)',
+        Number.isFinite(want) && bal === want && bal >= 42,
+        `she sees ${JSON.stringify(r.data)}, service role sees ${JSON.stringify(truth.data)}`,
+      )
     }
     {
       const r = await rest('profiles?select=user_id', { token: B })

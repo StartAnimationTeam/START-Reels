@@ -19,7 +19,7 @@
     "db:types": "supabase gen types typescript --project-id ioulkocgnprfyofmvnbd > web/src/lib/database.types.ts",
     "fn:deploy": "supabase functions deploy",
     "fn:secrets": "supabase secrets set --env-file supabase/.env",
-    "check:fn": "deno check supabase/functions/**/*.ts"
+    "check:fn": "cd supabase/functions && deno check */*.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.111.0"

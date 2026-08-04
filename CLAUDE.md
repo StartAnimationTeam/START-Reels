@@ -10,11 +10,14 @@ An in-house Netflix-style video streaming platform by **START LANDS Inc.**
 Users browse and stream a curated library; credits gate premium content;
 creators upload; moderators review; administrators run it all from a dashboard.
 
-The approved build plan is `C:\Users\Admin\.claude\plans\plan-and-have-a-mossy-globe.md`.
+The approved build plan is `C:\Users\User\.claude\plans\plan-and-have-a-mossy-globe.md`.
 Project memory (goal, stack decisions, credit model) lives in
-`C:\Users\Admin\.claude\projects\c--Users-Admin-Claude-Project-START-Video-Library\memory\`.
+`C:\Users\User\.claude\projects\c--Users-User-Claude-Projects-START-Reels\memory\`.
+*(2026-08-04: project moved from the old `C:\Users\Admin` machine. Neither the
+plan file nor the memory folder made the trip — both still need copying from
+the old PC. Until then, treat this file + README as the authoritative record.)*
 
-**Sibling project:** `c:\Users\Admin\Claude Project\START AI Studio` is the
+**Sibling project:** `c:\Users\User\Claude Projects\START AI Studio` is the
 house-style reference, maintained by the same team. Port its credit ledger and
 RLS patterns. Do **not** repeat its five documented mistakes (see below).
 
@@ -191,7 +194,7 @@ after `pk_test_` / `pk_live_` and drop the trailing `$`.
 
 ```bash
 cd web && npx tsc --noEmit && npm run build
-deno check supabase/functions/**/*.ts
+cd supabase/functions && deno check */*.ts   # from functions/, so its deno.json governs (94f38a7)
 ```
 
 This has caught real errors every time skipping it would have shipped one.
