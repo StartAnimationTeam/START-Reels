@@ -1,176 +1,231 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { StreamPlayer } from '@/components/player/StreamPlayer'
-import { UnlockDialog } from '@/components/UnlockDialog'
-import { ApiError, useApi } from '@/lib/api'
+import { ApiError, useApi, type PlaybackResult } from '@/lib/api'
 import { announceCoinsDelta } from '@/lib/coins'
-import { useUnlock } from '@/hooks/useUnlock'
 import { creditLabel, episodeLabel, episodeProgressLabel, errorLabel } from '@/lib/labels'
 
 /**
- * The vertical episode player — the DramaBox watch surface.
+ * The DramaBox watch surface: ONE vertical swiper over the whole series.
+ * Swipe up → next episode, swipe down → previous, and when an episode ends
+ * the swiper scrolls itself to the next slide. A locked slide doesn't play —
+ * it IS the paywall: poster, price against balance, one Unlock button.
  *
- * One 9:16 stage filling the viewport under the top bar, the episode's
- * unlock ladder from useUnlock, prev/next hops along the series, and
- * auto-advance: `ended` pushes to the next episode when it's open, or opens
- * the UnlockDialog when it costs coins. The server hands in everything it
- * proved through RLS — entitlements, resume position, balance — and the
- * Edge Functions re-prove whatever matters.
+ * Cost discipline (traps #1 + the 60/min mint limit): only the ACTIVE slide
+ * mounts a <video>; mints cache per episode until the signed URL's own
+ * expiry so swiping back never re-mints; exactly one open slide ahead is
+ * prefetched. Swiping INTO a locked episode never charges — only the
+ * explicit Unlock tap does, and it announces the delta so the nav badge
+ * drops in realtime.
+ *
+ * The URL keeps up via history.replaceState — shareable, back-button-sane,
+ * and no server round-trip mid-swipe.
  */
 
-export interface EpisodeNav {
+export interface EpisodeSlide {
   id: string
   episodeNumber: number
+  thumbnailUrl: string | null
   open: boolean // free-window or already entitled — display only, server re-checks
 }
 
+type SlideState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'ready'; playback: PlaybackResult }
+  | { kind: 'error'; code: string }
+
 export function WatchExperience({
-  videoId,
-  episodeNumber,
+  slides,
+  startIndex,
   seriesTitle,
   seriesSlug,
   totalEpisodes,
-  episodeCost, // series-resolved cost of THIS episode (0 inside free window)
   lockedEpisodeCost,
-  thumbnailUrl,
   signedIn,
-  initiallyEntitled,
   resumeAt,
-  balance,
-  prev,
-  next,
+  initialBalance,
 }: {
-  videoId: string
-  episodeNumber: number
+  slides: EpisodeSlide[]
+  startIndex: number
   seriesTitle: string
   seriesSlug: string
   totalEpisodes: number
-  episodeCost: number
   lockedEpisodeCost: number
-  thumbnailUrl: string | null
   signedIn: boolean
-  initiallyEntitled: boolean
   resumeAt: number
-  balance: number
-  prev: EpisodeNav | null
-  next: EpisodeNav | null
+  initialBalance: number
 }) {
-  const router = useRouter()
   const api = useApi()
-  // Free episodes auto-unlock on arrival: unlock_video is idempotent and
-  // writes no ledger row for the free window, so "just play it" is honest.
-  const autoStart = initiallyEntitled || (signedIn && episodeCost === 0)
-  const { state, unlock, startPlayback } = useUnlock(videoId, initiallyEntitled)
-  const startedRef = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const entryId = slides[startIndex]?.id
 
-  const [dialogFor, setDialogFor] = useState<EpisodeNav | null>(null)
-  const [dialogBusy, setDialogBusy] = useState(false)
-  const [dialogError, setDialogError] = useState<string | null>(null)
+  const [active, setActive] = useState(startIndex)
+  const [balance, setBalance] = useState(initialBalance)
+  // Episodes unlocked DURING this visit — merged with the server's flags.
+  const [justUnlocked, setJustUnlocked] = useState<ReadonlySet<string>>(new Set())
+  const [states, setStates] = useState<Record<string, SlideState>>({})
+  const [unlockBusy, setUnlockBusy] = useState(false)
 
-  useEffect(() => {
-    if (autoStart && !startedRef.current) {
-      startedRef.current = true
-      void (initiallyEntitled ? startPlayback() : unlock())
-    }
-  }, [autoStart, initiallyEntitled, startPlayback, unlock])
-
-  const goTo = useCallback(
-    (ep: EpisodeNav) => {
-      if (ep.open || !signedIn) {
-        router.push(`/watch/${ep.id}`)
-      } else {
-        setDialogError(null)
-        setDialogFor(ep)
-      }
-    },
-    [router, signedIn],
+  const isOpen = useCallback(
+    (slide: EpisodeSlide) => slide.open || justUnlocked.has(slide.id),
+    [justUnlocked],
   )
 
-  const confirmUnlock = useCallback(async () => {
-    if (!dialogFor) return
-    setDialogBusy(true)
-    setDialogError(null)
-    try {
-      const result = await api.unlockVideo(dialogFor.id)
-      if (result.charged > 0) announceCoinsDelta(-result.charged)
-      setDialogFor(null)
-      router.push(`/watch/${dialogFor.id}`)
-    } catch (err) {
-      setDialogError(err instanceof ApiError ? err.code : 'unknown_error')
-    } finally {
-      setDialogBusy(false)
-    }
-  }, [api, dialogFor, router])
+  // Mint cache: episode → playback until its TTL (the ref is the truth).
+  const cacheRef = useRef(new Map<string, { playback: PlaybackResult }>())
+  const inFlightRef = useRef(new Set<string>())
 
-  const onEnded = useCallback(() => {
-    if (next) goTo(next)
-  }, [next, goTo])
+  const ensureMint = useCallback(
+    async (slide: EpisodeSlide) => {
+      if (!signedIn || !isOpen(slide)) return
+      const cached = cacheRef.current.get(slide.id)
+      if (cached && cached.playback.expires * 1000 > Date.now() + 10_000) {
+        setStates((s) =>
+          s[slide.id]?.kind === 'ready' ? s : { ...s, [slide.id]: { kind: 'ready', playback: cached.playback } },
+        )
+        return
+      }
+      if (inFlightRef.current.has(slide.id)) return
+      inFlightRef.current.add(slide.id)
+      setStates((s) => ({ ...s, [slide.id]: { kind: 'loading' } }))
+      try {
+        // Idempotent for entitled/free episodes: charges 0, returns the row.
+        await api.unlockVideo(slide.id)
+        const playback = await api.startPlayback(slide.id, navigator.userAgent.slice(0, 40))
+        cacheRef.current.set(slide.id, { playback })
+        setStates((s) => ({ ...s, [slide.id]: { kind: 'ready', playback } }))
+      } catch (err) {
+        const code = err instanceof ApiError ? err.code : 'unknown_error'
+        setStates((s) => ({ ...s, [slide.id]: { kind: 'error', code } }))
+      } finally {
+        inFlightRef.current.delete(slide.id)
+      }
+    },
+    [api, signedIn, isOpen],
+  )
+
+  // The explicit paid unlock — the ONLY path that spends coins here.
+  const unlockCurrent = useCallback(
+    async (slide: EpisodeSlide) => {
+      setUnlockBusy(true)
+      setStates((s) => ({ ...s, [slide.id]: { kind: 'idle' } }))
+      try {
+        const result = await api.unlockVideo(slide.id)
+        if (result.charged > 0) {
+          announceCoinsDelta(-result.charged)
+          setBalance((b) => Math.max(0, b - result.charged))
+        }
+        setJustUnlocked((set) => new Set(set).add(slide.id))
+        const playback = await api.startPlayback(slide.id, navigator.userAgent.slice(0, 40))
+        cacheRef.current.set(slide.id, { playback })
+        setStates((s) => ({ ...s, [slide.id]: { kind: 'ready', playback } }))
+      } catch (err) {
+        setStates((s) => ({
+          ...s,
+          [slide.id]: { kind: 'error', code: err instanceof ApiError ? err.code : 'unknown_error' },
+        }))
+      } finally {
+        setUnlockBusy(false)
+      }
+    },
+    [api],
+  )
+
+  // Land on the entry episode before the first paint settles.
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const target = container.children[startIndex] as HTMLElement | undefined
+    target?.scrollIntoView({ block: 'start', behavior: 'instant' as ScrollBehavior })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- entry position only
+  }, [])
+
+  // Which slide is on screen.
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const index = Number((entry.target as HTMLElement).dataset.index)
+            if (!Number.isNaN(index)) setActive(index)
+          }
+        }
+      },
+      { root: container, threshold: 0.6 },
+    )
+    for (const child of container.children) observer.observe(child)
+    return () => observer.disconnect()
+  }, [slides.length])
+
+  // Active slide: mint it, prefetch ONE open slide ahead, keep the URL true.
+  useEffect(() => {
+    const current = slides[active]
+    if (!current) return
+    void ensureMint(current)
+    const nextOpen = slides.slice(active + 1).find((s) => isOpen(s))
+    if (nextOpen) void ensureMint(nextOpen)
+    window.history.replaceState(null, '', `/watch/${current.id}`)
+  }, [active, slides, ensureMint, isOpen])
+
+  const advance = useCallback(() => {
+    const container = containerRef.current
+    const next = container?.children[active + 1] as HTMLElement | undefined
+    next?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [active])
 
   return (
-    <div className="relative mx-auto flex h-[calc(100dvh-3.5rem)] max-w-md flex-col bg-black">
-      {/* ── the stage ─────────────────────────────────────────────────── */}
-      <div className="relative min-h-0 flex-1">
-        {state.kind === 'playing' ? (
-          <StreamPlayer
-            src={state.playback.url}
-            sessionId={state.playback.sessionId}
-            poster={thumbnailUrl}
-            vertical
-            autoPlay
-            startAt={resumeAt}
-            onEnded={onEnded}
-            onExpired={() => void startPlayback()} // fresh URL = fresh entitlement check
-          />
-        ) : (
-          <div
-            className="flex h-full items-center justify-center"
-            style={
-              thumbnailUrl
-                ? {
-                    backgroundImage: `linear-gradient(rgb(0 0 0 / 0.65), rgb(0 0 0 / 0.75)), url(${thumbnailUrl})`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                  }
-                : undefined
-            }
-          >
-            {state.kind === 'unlocking' || state.kind === 'starting' ? (
-              <p className="animate-fade text-sm text-ink-secondary">
-                {state.kind === 'unlocking' ? 'Unlocking…' : 'Preparing your stream…'}
-              </p>
-            ) : state.kind === 'error' ? (
-              <div className="animate-scale-in max-w-xs px-6 text-center">
-                <p className="text-ink">{errorLabel(state.code)}</p>
-                {state.code === 'insufficient_credits' ? (
-                  <Link
-                    href="/profile/wallet"
-                    className="mt-4 inline-block rounded-lg px-4 py-2 text-sm font-medium text-white"
-                    style={{ background: 'var(--brand-gradient)' }}
-                  >
-                    Get coins
-                  </Link>
-                ) : (
-                  <button
-                    onClick={() => void startPlayback()}
-                    className="mt-4 rounded-lg border border-line-strong px-4 py-2 text-sm text-ink-secondary hover:text-ink"
-                  >
-                    Try again
-                  </button>
-                )}
-              </div>
+    <div
+      ref={containerRef}
+      className="no-scrollbar mx-auto h-[calc(100dvh-3.5rem)] max-w-md snap-y snap-mandatory overflow-y-auto bg-black"
+    >
+      {slides.map((slide, index) => {
+        const state: SlideState = states[slide.id] ?? { kind: 'idle' }
+        const isActive = index === active
+        const open = isOpen(slide)
+        const short = balance < lockedEpisodeCost
+
+        return (
+          <section key={slide.id} data-index={index} className="relative h-full w-full snap-start snap-always">
+            {/* stage */}
+            {isActive && open && state.kind === 'ready' ? (
+              <StreamPlayer
+                src={state.playback.url}
+                sessionId={state.playback.sessionId}
+                poster={slide.thumbnailUrl}
+                vertical
+                autoPlay
+                startAt={slide.id === entryId ? resumeAt : 0}
+                onEnded={advance}
+                onExpired={() => {
+                  cacheRef.current.delete(slide.id)
+                  void ensureMint(slide) // fresh URL = fresh entitlement check
+                }}
+              />
             ) : (
-              /* locked */
-              <div className="animate-scale-in max-w-xs px-6 text-center">
-                <p className="text-xs uppercase tracking-widest text-ink-muted">
-                  {episodeLabel(episodeNumber)}
-                </p>
-                <h2 className="mt-2 text-lg font-semibold">{seriesTitle}</h2>
-                {!signedIn ? (
-                  <>
+              <div
+                className="flex h-full items-center justify-center"
+                style={
+                  slide.thumbnailUrl
+                    ? {
+                        backgroundImage: `linear-gradient(rgb(0 0 0 / 0.55), rgb(0 0 0 / 0.75)), url(${slide.thumbnailUrl})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                      }
+                    : undefined
+                }
+              >
+                {!isActive ? null : !signedIn ? (
+                  <div className="animate-scale-in max-w-xs px-6 text-center">
+                    <p className="text-xs uppercase tracking-widest text-ink-muted">
+                      {episodeLabel(slide.episodeNumber)}
+                    </p>
+                    <h2 className="mt-2 text-lg font-semibold">{seriesTitle}</h2>
                     <p className="mt-2 text-sm text-ink-secondary">Sign in to start watching.</p>
                     <Link
                       href="/sign-in"
@@ -179,72 +234,107 @@ export function WatchExperience({
                     >
                       Sign in
                     </Link>
-                  </>
+                  </div>
+                ) : !open ? (
+                  /* the in-slide paywall */
+                  <div className="animate-scale-in w-full max-w-xs px-6 text-center">
+                    <p className="text-xs uppercase tracking-widest text-white/70">
+                      {episodeLabel(slide.episodeNumber)}
+                    </p>
+                    <h2 className="mt-2 text-lg font-semibold text-white">{seriesTitle}</h2>
+
+                    <div className="mt-4 flex items-center justify-between rounded-xl border border-white/15 bg-black/45 p-4 backdrop-blur">
+                      <div className="text-left">
+                        <p className="text-[11px] text-white/60">Price</p>
+                        <p className="text-lg font-semibold tabular-nums text-white">
+                          {creditLabel(lockedEpisodeCost)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[11px] text-white/60">Your balance</p>
+                        <p
+                          className="text-lg font-semibold tabular-nums"
+                          style={{ color: short ? 'var(--danger)' : 'var(--success)' }}
+                        >
+                          {creditLabel(balance)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {state.kind === 'error' && (
+                      <p className="mt-2 text-sm" style={{ color: 'var(--danger)' }}>
+                        {errorLabel(state.code)}
+                      </p>
+                    )}
+
+                    {short ? (
+                      <Link
+                        href="/profile/wallet"
+                        className="mt-4 inline-block w-full rounded-lg px-5 py-2.5 text-sm font-medium text-white shadow-[var(--shadow-brand)]"
+                        style={{ background: 'var(--brand-gradient)' }}
+                      >
+                        Get coins
+                      </Link>
+                    ) : (
+                      <button
+                        onClick={() => void unlockCurrent(slide)}
+                        disabled={unlockBusy}
+                        className="mt-4 w-full rounded-lg px-5 py-2.5 text-sm font-medium text-white shadow-[var(--shadow-brand)] transition-transform enabled:hover:scale-[1.02] disabled:opacity-60"
+                        style={{ background: 'var(--brand-gradient)' }}
+                      >
+                        {unlockBusy ? 'Unlocking…' : `Unlock for ${creditLabel(lockedEpisodeCost)}`}
+                      </button>
+                    )}
+                  </div>
+                ) : state.kind === 'error' ? (
+                  <div className="animate-scale-in max-w-xs px-6 text-center">
+                    <p className="text-ink">{errorLabel(state.code)}</p>
+                    <button
+                      onClick={() => void ensureMint(slide)}
+                      className="mt-4 rounded-lg border border-line-strong px-4 py-2 text-sm text-ink-secondary hover:text-ink"
+                    >
+                      Try again
+                    </button>
+                  </div>
                 ) : (
-                  <button
-                    onClick={() => void unlock()}
-                    className="mt-4 rounded-lg px-5 py-2.5 text-sm font-medium text-white shadow-[var(--shadow-brand)] transition-transform hover:scale-[1.02]"
-                    style={{ background: 'var(--brand-gradient)' }}
-                  >
-                    {episodeCost === 0 ? 'Watch now' : `Unlock for ${creditLabel(episodeCost)}`}
-                  </button>
+                  <p className="animate-fade text-sm text-ink-secondary">Preparing your stream…</p>
                 )}
               </div>
             )}
-          </div>
-        )}
 
-        {/* series identity overlay, always visible over the stage */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent p-4">
-          <Link
-            href={`/series/${seriesSlug}`}
-            className="pointer-events-auto inline-flex max-w-full items-center gap-2 text-sm font-medium text-white"
-          >
-            <span className="truncate">{seriesTitle}</span>
-            <span aria-hidden>›</span>
-          </Link>
-          <p className="mt-0.5 text-xs text-white/70">
-            {episodeProgressLabel(episodeNumber, totalEpisodes)}
-          </p>
-        </div>
-      </div>
+            {/* series identity overlay */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Link
+                    href={`/series/${seriesSlug}`}
+                    className="pointer-events-auto inline-flex max-w-full items-center gap-2 text-sm font-medium text-white"
+                  >
+                    <span className="truncate">{seriesTitle}</span>
+                    <span aria-hidden>›</span>
+                  </Link>
+                  <p className="mt-0.5 text-xs text-white/70">
+                    {episodeProgressLabel(slide.episodeNumber, totalEpisodes)}
+                  </p>
+                </div>
+                <Link
+                  href={`/series/${seriesSlug}`}
+                  className="pointer-events-auto shrink-0 rounded-full border border-white/25 bg-black/30 px-2.5 py-1 text-[11px] text-white/85"
+                >
+                  All episodes
+                </Link>
+              </div>
+            </div>
 
-      {/* ── episode hops ──────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 border-t border-line bg-background px-4 py-3">
-        <button
-          onClick={() => prev && goTo(prev)}
-          disabled={!prev}
-          className="rounded-lg border border-line-strong px-4 py-2 text-sm text-ink-secondary transition-colors enabled:hover:text-ink disabled:opacity-40"
-        >
-          ‹ {prev ? episodeLabel(prev.episodeNumber) : 'Prev'}
-        </button>
-
-        <Link href={`/series/${seriesSlug}`} className="text-xs text-ink-muted hover:text-ink">
-          All episodes
-        </Link>
-
-        <button
-          onClick={() => next && goTo(next)}
-          disabled={!next}
-          className="rounded-lg border border-line-strong px-4 py-2 text-sm text-ink-secondary transition-colors enabled:hover:text-ink disabled:opacity-40"
-        >
-          {next ? episodeLabel(next.episodeNumber) : 'Next'} ›
-        </button>
-      </div>
-
-      {dialogFor && (
-        <UnlockDialog
-          open={Boolean(dialogFor)}
-          onClose={() => setDialogFor(null)}
-          onConfirm={() => void confirmUnlock()}
-          episodeNumber={dialogFor.episodeNumber}
-          seriesTitle={seriesTitle}
-          cost={lockedEpisodeCost}
-          balance={balance}
-          busy={dialogBusy}
-          errorCode={dialogError}
-        />
-      )}
+            {/* swipe affordance — only where a next slide exists */}
+            {isActive && index < slides.length - 1 && (
+              <p className="pointer-events-none absolute inset-x-0 bottom-2 text-center text-[11px] text-white/50">
+                ↑ swipe up for {episodeLabel(slides[index + 1].episodeNumber)}
+              </p>
+            )}
+          </section>
+        )
+      })}
     </div>
   )
 }

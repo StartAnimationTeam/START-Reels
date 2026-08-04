@@ -3,14 +3,14 @@ import { notFound } from 'next/navigation'
 
 import { currentUser } from '@/lib/auth'
 import { createAnonSupabase, createServerSupabase } from '@/lib/supabase-server'
-import { WatchExperience, type EpisodeNav } from './WatchExperience'
+import { WatchExperience, type EpisodeSlide } from './WatchExperience'
 
 /**
- * Server component: loads the episode, its series and its siblings through
- * RLS and hands the client everything it proved — entitlement map, resume
- * position, coin balance. The catalog rows it reads cannot contain
- * provider_asset_id (the 0005 column grant), and every claim the client
- * could tamper with is re-proved by unlock_video / video-playback.
+ * Server component: loads the WHOLE episode roster through RLS and hands the
+ * client one vertical swiper — the entry episode is just the slide it starts
+ * on. Everything the client could tamper with (entitlements, free window,
+ * balance) is re-proved by unlock_video / video-playback server-side; the
+ * flags here only decide which UI each slide shows first.
  */
 
 interface Props {
@@ -33,7 +33,7 @@ export default async function WatchPage({ params }: Props) {
 
   const { data: video } = await supabase
     .from('videos')
-    .select('id, title, thumbnail_url, series_id, episode_number, access_tier, credit_cost')
+    .select('id, series_id, episode_number')
     .eq('id', id)
     .maybeSingle()
 
@@ -49,7 +49,7 @@ export default async function WatchPage({ params }: Props) {
       .maybeSingle(),
     supabase
       .from('videos')
-      .select('id, episode_number')
+      .select('id, title, episode_number, thumbnail_url')
       .eq('series_id', video.series_id)
       .eq('status', 'published')
       .is('deleted_at', null)
@@ -58,13 +58,15 @@ export default async function WatchPage({ params }: Props) {
   if (!series) notFound()
 
   const episodes = siblings ?? []
-  const myIndex = episodes.findIndex((e) => e.id === video.id)
+  // The entry episode may be unpublished-but-creator-visible; if it isn't in
+  // the published roster, it can't be swiped to — treat as not found.
+  const startIndex = episodes.findIndex((e) => e.id === video.id)
+  if (startIndex === -1) notFound()
 
-  // Entitlements, resume and balance — the viewer's own rows through RLS.
   let unlockedIds = new Set<string>()
   let resumeAt = 0
   let balance = 0
-  if (userId) {
+  if (userId && episodes.length) {
     const now = new Date().toISOString()
     const [entRes, historyRes, balanceRes] = await Promise.all([
       supabase
@@ -87,34 +89,24 @@ export default async function WatchPage({ params }: Props) {
     balance = Number(balanceRes.data?.available_balance ?? 0)
   }
 
-  const nav = (e: { id: string; episode_number: number | null } | undefined): EpisodeNav | null =>
-    e
-      ? {
-          id: e.id,
-          episodeNumber: e.episode_number ?? 0,
-          open: (e.episode_number ?? 0) <= series.free_episode_count || unlockedIds.has(e.id),
-        }
-      : null
-
-  const myNumber = video.episode_number ?? 0
-  const episodeCost = myNumber <= series.free_episode_count ? 0 : series.episode_credit_cost
+  const slides: EpisodeSlide[] = episodes.map((e) => ({
+    id: e.id,
+    episodeNumber: e.episode_number ?? 0,
+    thumbnailUrl: e.thumbnail_url,
+    open: (e.episode_number ?? 0) <= series.free_episode_count || unlockedIds.has(e.id),
+  }))
 
   return (
     <WatchExperience
-      videoId={video.id}
-      episodeNumber={myNumber}
+      slides={slides}
+      startIndex={startIndex}
       seriesTitle={series.title}
       seriesSlug={series.slug}
       totalEpisodes={series.total_episodes}
-      episodeCost={episodeCost}
       lockedEpisodeCost={series.episode_credit_cost}
-      thumbnailUrl={video.thumbnail_url}
       signedIn={Boolean(userId)}
-      initiallyEntitled={unlockedIds.has(video.id)}
       resumeAt={resumeAt}
-      balance={balance}
-      prev={nav(myIndex > 0 ? episodes[myIndex - 1] : undefined)}
-      next={nav(myIndex >= 0 ? episodes[myIndex + 1] : undefined)}
+      initialBalance={balance}
     />
   )
 }
