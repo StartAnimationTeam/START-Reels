@@ -31,6 +31,7 @@ interface Body {
   featured?: boolean
   rank?: number
   reason?: string
+  episodeNumber?: number
 }
 
 Deno.serve(async (req) => {
@@ -75,6 +76,12 @@ Deno.serve(async (req) => {
     case 'update_meta': {
       if (typeof body.title === 'string' && body.title.trim()) patch.title = body.title.trim().slice(0, 200)
       if (typeof body.description === 'string') patch.description = body.description.slice(0, 5000)
+      // Renumbering an episode: the partial unique index referees a taken
+      // slot (translated to 409 below). Free-window pricing follows the
+      // NUMBER, so unlock_video resolves the new position automatically.
+      if (Number.isInteger(body.episodeNumber) && body.episodeNumber! >= 1) {
+        patch.episode_number = body.episodeNumber
+      }
       if (body.accessTier) {
         patch.access_tier = body.accessTier
         patch.credit_cost =
@@ -137,6 +144,10 @@ Deno.serve(async (req) => {
   if (updateErr) {
     // 23514 = check_violation: the tier<->cost invariant said no.
     if (updateErr.code === '23514') return fail(req, 'bad_request', 400, 'tier_cost_mismatch')
+    // 23505 on the (series, episode) index: that number is already taken.
+    if (updateErr.code === '23505' && updateErr.message.includes('videos_series_episode_idx')) {
+      return fail(req, 'episode_number_taken', 409)
+    }
     return fail(req, 'update_failed', 500, updateErr.message)
   }
 

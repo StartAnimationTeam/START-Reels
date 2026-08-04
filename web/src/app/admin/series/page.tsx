@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import { SeriesCreate } from './SeriesCreate'
+import { SeriesRowActions } from './SeriesRowActions'
+import { hasRole } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase-server'
 import { episodeLabel, SERIES_STATUS_LABELS, seriesPricingLabel } from '@/lib/labels'
 
@@ -16,14 +18,20 @@ export const metadata: Metadata = { title: 'Series' }
 export default async function AdminSeriesPage() {
   const supabase = await createServerSupabase()
 
-  const { data: series } = await supabase
-    .from('series')
-    .select(
-      'id, slug, title, status, cover_url, free_episode_count, episode_credit_cost, is_members_only, total_episodes, is_featured, featured_rank, published_at, created_at',
-    )
-    .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-    .limit(200)
+  const [{ data: series }, viewerIsAdmin] = await Promise.all([
+    supabase
+      .from('series')
+      .select(
+        'id, slug, title, status, cover_url, free_episode_count, episode_credit_cost, is_members_only, total_episodes, is_featured, featured_rank, published_at, created_at',
+      )
+      .is('deleted_at', null)
+      // The 0018 backfill carried 'removed' over WITHOUT deleted_at; either
+      // way, a removed series is history, not library.
+      .neq('status', 'removed')
+      .order('created_at', { ascending: false })
+      .limit(200),
+    hasRole('administrator'),
+  ])
 
   const rows = series ?? []
 
@@ -46,6 +54,7 @@ export default async function AdminSeriesPage() {
                 <th className="px-4 py-2.5 font-medium">Pricing</th>
                 <th className="px-4 py-2.5 font-medium">Members</th>
                 <th className="px-4 py-2.5 font-medium">Featured</th>
+                {viewerIsAdmin && <th className="px-4 py-2.5 text-right font-medium">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
@@ -86,6 +95,11 @@ export default async function AdminSeriesPage() {
                   <td className="px-4 py-2.5 tabular-nums text-ink-secondary">
                     {s.is_featured ? `#${s.featured_rank ?? '—'}` : '—'}
                   </td>
+                  {viewerIsAdmin && (
+                    <td className="px-4 py-2.5">
+                      <SeriesRowActions seriesId={s.id} />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

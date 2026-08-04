@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
@@ -10,7 +11,10 @@ import { durationLabel, episodeLabel, errorLabel, VIDEO_STATUS_LABELS } from '@/
  * The episode roster with teeth. Every action rides the existing
  * admin-videos function (audited, role-checked server-side):
  *
+ *   preview  → /watch/[id] in a new tab (staff RLS shows unpublished too)
  *   rename   → update_meta { title }
+ *   move     → update_meta { episodeNumber } (409 when the slot is taken;
+ *              free-window pricing follows the number automatically)
  *   publish  → publish  (409 video_not_ready until encoding finishes)
  *   reject   → reject   (pulls a wrongly-published episode, keeps the row)
  *   delete   → remove   (ADMIN-only: revokes + refunds every unlock, then
@@ -38,6 +42,7 @@ export function EpisodeTable({
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<{ id: string; code: string } | null>(null)
   const [editing, setEditing] = useState<{ id: string; title: string } | null>(null)
+  const [moving, setMoving] = useState<{ id: string; number: string } | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const run = async (id: string, fn: () => Promise<unknown>) => {
@@ -46,6 +51,7 @@ export function EpisodeTable({
     try {
       await fn()
       setEditing(null)
+      setMoving(null)
       setConfirmDelete(null)
       router.refresh()
     } catch (err) {
@@ -148,14 +154,62 @@ export function EpisodeTable({
                           Cancel
                         </button>
                       </>
+                    ) : moving?.id === ep.id ? (
+                      <>
+                        <input
+                          autoFocus
+                          type="number"
+                          min={1}
+                          value={moving.number}
+                          onChange={(e) => setMoving({ id: ep.id, number: e.target.value })}
+                          onKeyDown={(e) => {
+                            const n = Number(moving.number)
+                            if (e.key === 'Enter' && Number.isInteger(n) && n >= 1)
+                              void run(ep.id, () => api.video('update_meta', ep.id, { episodeNumber: n }))
+                            if (e.key === 'Escape') setMoving(null)
+                          }}
+                          className="w-16 rounded-lg border border-line-strong bg-surface-muted px-2 py-1 text-xs tabular-nums focus:border-brand focus:outline-none"
+                          aria-label="New episode number"
+                        />
+                        <button
+                          disabled={busy || !(Number.isInteger(Number(moving.number)) && Number(moving.number) >= 1)}
+                          onClick={() =>
+                            void run(ep.id, () =>
+                              api.video('update_meta', ep.id, { episodeNumber: Number(moving.number) }),
+                            )
+                          }
+                          className="rounded-md px-2.5 py-1 text-xs font-medium text-white disabled:opacity-40"
+                          style={{ background: 'var(--brand-gradient)' }}
+                        >
+                          Move
+                        </button>
+                        <button disabled={busy} onClick={() => setMoving(null)} className={btn}>
+                          Cancel
+                        </button>
+                      </>
                     ) : (
                       <>
+                        <Link
+                          href={`/watch/${ep.id}`}
+                          target="_blank"
+                          className="rounded-md border border-line-strong px-2.5 py-1 text-xs text-ink-secondary transition-colors hover:border-brand hover:text-ink"
+                        >
+                          Preview ↗
+                        </Link>
                         <button
                           disabled={busy}
                           onClick={() => setEditing({ id: ep.id, title: ep.title })}
                           className={btn}
                         >
                           Rename
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => setMoving({ id: ep.id, number: String(ep.episode_number ?? 1) })}
+                          className={btn}
+                          title="Change the episode number — the free window follows the number"
+                        >
+                          Move
                         </button>
 
                         {ep.status !== 'published' && (
