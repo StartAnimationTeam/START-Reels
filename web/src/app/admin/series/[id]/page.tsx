@@ -4,17 +4,13 @@ import { notFound } from 'next/navigation'
 
 import { CoverUploader } from './CoverUploader'
 import { EpisodeQueue } from './EpisodeQueue'
+import { EpisodeTable } from './EpisodeTable'
 import { SeriesActions } from './SeriesActions'
 import { SeriesEditor } from './SeriesEditor'
 import { hasRole } from '@/lib/auth'
 import { activeCategories, allTags } from '@/lib/catalog'
 import { createServerSupabase } from '@/lib/supabase-server'
-import {
-  durationLabel,
-  episodeLabel,
-  SERIES_STATUS_LABELS,
-  VIDEO_STATUS_LABELS,
-} from '@/lib/labels'
+import { SERIES_STATUS_LABELS } from '@/lib/labels'
 
 /**
  * One series, everything about it: metadata editor, cover, lifecycle
@@ -144,52 +140,7 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
         <h3 className="text-sm font-medium text-ink-secondary">
           Episodes {episodes.length > 0 && <span className="text-ink-faint">({episodes.length})</span>}
         </h3>
-
-        {episodes.length === 0 ? (
-          <p className="mt-2 text-sm text-ink-muted">
-            None yet — queue the files below and encoding will publish them automatically.
-          </p>
-        ) : (
-          <div className="mt-3 overflow-x-auto rounded-xl border border-line">
-            <table className="w-full min-w-[560px] text-sm">
-              <thead className="border-b border-line bg-surface text-left text-xs text-ink-muted">
-                <tr>
-                  <th className="px-4 py-2.5 font-medium">EP</th>
-                  <th className="px-4 py-2.5 font-medium">Title</th>
-                  <th className="px-4 py-2.5 font-medium">Status</th>
-                  <th className="px-4 py-2.5 font-medium">Length</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]">
-                {episodes.map((ep) => (
-                  <tr key={ep.id}>
-                    <td className="px-4 py-2.5 tabular-nums text-ink-secondary">
-                      {ep.episode_number != null ? episodeLabel(ep.episode_number) : '—'}
-                    </td>
-                    <td className="px-4 py-2.5 text-ink">{ep.title}</td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        className="rounded-full border border-line-strong px-2 py-0.5 text-xs"
-                        style={
-                          ep.status === 'published'
-                            ? { color: 'var(--success)' }
-                            : ep.status === 'rejected' || ep.status === 'removed'
-                              ? { color: 'var(--danger)' }
-                              : undefined
-                        }
-                      >
-                        {VIDEO_STATUS_LABELS[ep.status] ?? ep.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 tabular-nums text-ink-secondary">
-                      {durationLabel(ep.duration_seconds)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <EpisodeTable episodes={episodes} viewerIsAdmin={viewerIsAdmin} />
       </section>
 
       {/* ── upload queue ───────────────────────────────────────────────── */}

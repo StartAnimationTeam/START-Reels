@@ -15,7 +15,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const links = [
     { href: '/admin', label: 'Overview' },
-    { href: '/admin/upload', label: 'Upload' },
     { href: '/admin/series', label: 'Series' },
     { href: '/admin/videos', label: 'Videos' },
     { href: '/admin/users', label: 'Users' },

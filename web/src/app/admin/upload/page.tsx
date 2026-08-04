@@ -1,30 +1,12 @@
-import type { Metadata } from 'next'
-import Link from 'next/link'
+import { redirect } from 'next/navigation'
 
-import { UploadForm } from '@/components/UploadForm'
-
-export const metadata: Metadata = { title: 'Upload' }
-
+/**
+ * Standalone uploads retired from the admin surface (owner call, 2026-08-04):
+ * in a series-first library every upload is an episode, and the Series pages
+ * own that flow end to end. The route redirects rather than 404s so old
+ * bookmarks land somewhere useful. (Creators keep their own upload page —
+ * the review flow is unchanged.)
+ */
 export default function AdminUploadPage() {
-  return (
-    <div className="max-w-2xl">
-      <h2 className="text-lg font-semibold tracking-tight">Upload a standalone video</h2>
-      <p className="mt-1 text-sm text-ink-muted">
-        Uploading episodes?{' '}
-        <Link href="/admin/series" className="text-ink underline hover:text-white">
-          Use Series
-        </Link>{' '}
-        — it queues whole seasons, numbers them and prices them automatically.
-      </p>
-      <p className="mt-2 text-sm text-ink-muted">
-        The file goes straight from your browser to Bunny over a resumable
-        connection — a dropped network picks up where it left off. Transcoding
-        starts automatically; the video publishes itself when encoding
-        finishes.
-      </p>
-      <div className="mt-6">
-        <UploadForm />
-      </div>
-    </div>
-  )
+  redirect('/admin/series')
 }
