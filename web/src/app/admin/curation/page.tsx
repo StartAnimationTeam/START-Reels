@@ -30,7 +30,7 @@ export default async function AdminCurationPage() {
       .order('published_at', { ascending: false }),
     supabase
       .from('series')
-      .select('id, title')
+      .select('id, title, hero_url')
       .eq('status', 'published')
       .eq('is_featured', false)
       .is('deleted_at', null)

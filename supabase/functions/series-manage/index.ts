@@ -255,6 +255,13 @@ Deno.serve(async (req) => {
 
     case 'set_featured': {
       if (!isStaff) return fail(req, 'forbidden', 403)
+      // NON-NEGOTIABLE (owner rule): nothing reaches the hero stage without
+      // a dedicated wide banner — the 9:16 poster crops faces off the
+      // screen there. Enforced HERE so every caller obeys, not just the
+      // Curation UI.
+      if (body.featured === true && !before.hero_url) {
+        return fail(req, 'banner_required', 409)
+      }
       const { data: after, error } = await db
         .from('series')
         .update({

@@ -126,6 +126,20 @@ try {
   const lateEdit = await fn(creator.jwt, { action: 'update_series', seriesId: sid, synopsis: 'post-publish edit' })
   h.check('once published, the creator can no longer edit (staff only)', lateEdit.status === 403, `HTTP ${lateEdit.status}`)
 
+  h.section('Featuring requires a banner (non-negotiable)')
+  {
+    const bare = await fn(admin.jwt, { action: 'set_featured', seriesId: sid, featured: true, rank: 1 })
+    h.check('featuring a bannerless series is refused (409 banner_required)',
+      bare.status === 409 && bare.data?.error === 'banner_required',
+      `HTTP ${bare.status}: ${JSON.stringify(bare.data)}`)
+
+    await sql(`update public.series set hero_url = 'https://example.test/banner.jpg' where id = '${sid}'`)
+    const withBanner = await fn(admin.jwt, { action: 'set_featured', seriesId: sid, featured: true, rank: 1 })
+    h.check('…and succeeds once a banner exists', withBanner.status === 200, `HTTP ${withBanner.status}`)
+    const unfeature = await fn(admin.jwt, { action: 'set_featured', seriesId: sid, featured: false })
+    h.check('unfeaturing never needs a banner', unfeature.status === 200, `HTTP ${unfeature.status}`)
+  }
+
   h.section('Remove revokes and refunds')
   {
     // A real paid unlock through the DB truth, then remove the series: the

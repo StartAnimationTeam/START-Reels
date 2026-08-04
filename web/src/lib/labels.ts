@@ -111,6 +111,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   video_not_published: 'This episode isn’t available right now.',
   episode_number_taken: 'That episode number is already used in this series.',
   category_exists: 'A category with that name already exists.',
+  banner_required: 'Featuring needs a wide banner first — upload one in Curation.',
   tag_exists: 'A facet with that name already exists.',
   series_not_ready: 'Publish at least one episode before publishing the series.',
   series_not_found: 'We couldn’t find that series.',

@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+import { Dialog } from '@/components/ui/Dialog'
 import { useAdminApi } from '@/lib/admin'
 import { episodeLabel, errorLabel } from '@/lib/labels'
 
@@ -33,7 +34,7 @@ export function FeaturedManager({
   candidates,
 }: {
   featured: FeaturedRow[]
-  candidates: Array<{ id: string; title: string }>
+  candidates: Array<{ id: string; title: string; hero_url: string | null }>
 }) {
   const api = useAdminApi()
   const router = useRouter()
@@ -95,9 +96,63 @@ export function FeaturedManager({
     })
   }
 
-  const add = () => {
-    if (!pickId) return
-    void run(() => setRank(pickId, featured.length + 1)).then(() => setPickId(''))
+  // ── the banner-first Feature flow (owner rule: non-negotiable) ─────────
+  // Feature opens a dialog that DEMANDS the wide banner before anything is
+  // featured; set_featured also refuses bannerless series server-side, so
+  // this dialog isn't politeness — it's the only way through.
+  const [featureTarget, setFeatureTarget] = useState<{ id: string; title: string; hero_url: string | null } | null>(null)
+  const [stagedBanner, setStagedBanner] = useState<{ file: File; dataUrl: string } | null>(null)
+  const [dialogError, setDialogError] = useState<string | null>(null)
+  const [dialogBusy, setDialogBusy] = useState(false)
+
+  const openFeatureDialog = () => {
+    const target = candidates.find((c) => c.id === pickId)
+    if (!target) return
+    setStagedBanner(null)
+    setDialogError(null)
+    setFeatureTarget(target)
+  }
+
+  const stageBanner = (file: File | undefined) => {
+    setDialogError(null)
+    if (!file) return
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+      setDialogError('bad_request')
+      return
+    }
+    if (file.size > 1_000_000) {
+      setDialogError('upload_too_large')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => setStagedBanner({ file, dataUrl: String(reader.result) })
+    reader.onerror = () => setDialogError('upload_failed')
+    reader.readAsDataURL(file)
+  }
+
+  const confirmFeature = async () => {
+    if (!featureTarget) return
+    if (!featureTarget.hero_url && !stagedBanner) return
+    setDialogBusy(true)
+    setDialogError(null)
+    try {
+      // Banner first — if this fails, nothing gets featured.
+      if (stagedBanner) {
+        await api.series('set_hero', {
+          seriesId: featureTarget.id,
+          imageBase64: stagedBanner.dataUrl.split(',')[1] ?? '',
+          contentType: stagedBanner.file.type,
+        })
+      }
+      await setRank(featureTarget.id, featured.length + 1)
+      setFeatureTarget(null)
+      setPickId('')
+      router.refresh()
+    } catch (err) {
+      setDialogError(err instanceof Error ? err.message : 'unknown_error')
+    } finally {
+      setDialogBusy(false)
+    }
   }
 
   const btn =
@@ -125,12 +180,12 @@ export function FeaturedManager({
           ))}
         </select>
         <button
-          onClick={add}
+          onClick={openFeatureDialog}
           disabled={busy || !pickId}
           className="rounded-lg px-4 py-2 text-sm font-medium text-white shadow-[var(--shadow-brand)] disabled:opacity-40"
           style={{ background: 'var(--brand-gradient)' }}
         >
-          Feature
+          Feature…
         </button>
       </div>
 
@@ -224,6 +279,73 @@ export function FeaturedManager({
           e.target.value = ''
         }}
       />
+
+      {/* ── the banner-first Feature dialog ───────────────────────────── */}
+      {featureTarget && (
+        <Dialog open onClose={() => !dialogBusy && setFeatureTarget(null)} labelledBy="feature-title">
+          <h3 id="feature-title" className="text-lg font-semibold tracking-tight">
+            Feature “{featureTarget.title}”
+          </h3>
+          <p className="mt-1 text-xs text-ink-muted">
+            The hero stage needs a wide banner — no banner, no feature.
+          </p>
+
+          {/* what the hero will actually render */}
+          <div className="mt-4 aspect-[21/9] overflow-hidden rounded-xl border border-line bg-surface-muted">
+            {stagedBanner ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={stagedBanner.dataUrl} alt="" className="h-full w-full object-cover" />
+            ) : featureTarget.hero_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={featureTarget.hero_url} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full items-center justify-center px-6 text-center text-xs text-ink-faint">
+                No banner yet — pick one below to continue.
+              </div>
+            )}
+          </div>
+
+          <label className="mt-3 block">
+            <span className="sr-only">Upload banner</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              disabled={dialogBusy}
+              onChange={(e) => {
+                stageBanner(e.target.files?.[0])
+                e.target.value = ''
+              }}
+              className="block w-full text-sm text-ink-secondary file:mr-3 file:rounded-lg file:border-0 file:bg-surface-brand file:px-4 file:py-2 file:text-sm file:text-ink"
+            />
+          </label>
+          <p className="mt-1 text-xs text-ink-muted">
+            Landscape ~16:9 · JPEG/PNG/WebP · up to 1 MB
+            {featureTarget.hero_url && !stagedBanner ? ' — or keep the existing banner above.' : ''}
+          </p>
+
+          {dialogError && (
+            <p className="mt-2 text-sm" style={{ color: 'var(--danger)' }}>{errorLabel(dialogError)}</p>
+          )}
+
+          <div className="mt-5 flex gap-3">
+            <button
+              onClick={() => setFeatureTarget(null)}
+              disabled={dialogBusy}
+              className="flex-1 rounded-lg border border-line-strong px-4 py-2.5 text-sm text-ink-secondary transition-colors hover:text-ink disabled:opacity-40"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void confirmFeature()}
+              disabled={dialogBusy || (!featureTarget.hero_url && !stagedBanner)}
+              className="flex-1 rounded-lg px-4 py-2.5 text-sm font-medium text-white shadow-[var(--shadow-brand)] transition-transform enabled:hover:scale-[1.01] disabled:opacity-40"
+              style={{ background: 'var(--brand-gradient)' }}
+            >
+              {dialogBusy ? 'Featuring…' : stagedBanner ? 'Upload banner & feature' : 'Feature'}
+            </button>
+          </div>
+        </Dialog>
+      )}
     </section>
   )
 }
