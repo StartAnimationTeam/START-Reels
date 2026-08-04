@@ -1,81 +1,79 @@
 @import "tailwindcss";
 
 /*
- * START Video Library — brand tokens.
+ * START Reels — brand tokens.
  *
- * The palette is START LANDS' own (same values as START AI Studio's
- * globals.css, so the two products read as one company), but the surfaces are
- * inverted: this app is DARK BY DEFAULT and AI Studio is light.
+ * The 2026-08 pivot restyle: START Reels is a vertical short-drama platform,
+ * and the look follows the genre — near-black neutral ground so 9:16 posters
+ * carry all the colour, with a hot pink→red accent for everything interactive
+ * (the DramaBox register, in our own values).
  *
- * That is a deliberate divergence, not a drift. A video library is dark for
- * reasons a dashboard isn't: video is letterboxed against the page, so light
- * chrome puts a bright frame around every thumbnail and fights the content for
- * attention; and people watch in the evening with the lights off. Netflix,
- * Dreambox and Freereels all land in the same place for the same reason.
- *
- * The purple stays structural and the pink/orange stays expressive, exactly as
- * the Identity Guidelines split them — only the ground they sit on changes.
+ * TOKEN NAMES ARE THE CONTRACT and did not change — only the values. Every
+ * component styled against bg-surface / text-ink / var(--brand-gradient)
+ * restyles wholesale from this file.
  */
 :root {
-  /* Structural purples (§3.2) */
-  --brand-deep: #5e148f;
-  --brand: #af28ea;
-  --brand-bright: #a735f2;
-  --brand-ink: #350d8c;
+  /* Structural brand — hot pink into red */
+  --brand-deep: #c9184a;
+  --brand: #ff2d6f;
+  --brand-bright: #ff477e;
+  --brand-ink: #8f0f3c;
 
-  /* Gradient spectrum (§2.4) — the ring in the mark */
-  --brand-magenta: #be0e80;
-  --brand-coral: #e07d86;
-  --brand-blush: #e8c8eb;
+  /* Gradient spectrum — the CTA sweep */
+  --brand-magenta: #ff477e;
+  --brand-coral: #ff6d5a;
+  --brand-blush: #ffc2d4;
 
-  /* Expressive (§3.4) — highlights, CTAs, interactive feedback */
-  --accent-pink: #fb6ed0;
-  --accent-pink-soft: #ff96ff;
+  /* Expressive — highlights, badges, interactive feedback */
+  --accent-pink: #ff7aa8;
+  --accent-pink-soft: #ffa8c5;
   --accent-peach: #ffcb9f;
   --accent-orange: #ffa377;
 
-  /* Secondary palette (§3.3) — status and data series */
+  /* Secondary palette — status and data series (unchanged) */
   --sea: #63f2e4;
   --teal: #2497aa;
   --sky: #44afe2;
   --ocean: #0468bf;
 
   /*
-   * Surfaces, tinted from the structural purple rather than neutral grey, so
-   * the chrome belongs to the brand instead of sitting beside it — the same
-   * rule as the light app, applied downward.
+   * Surfaces go NEUTRAL near-black: the catalog is a wall of saturated
+   * portrait posters, and any tint in the chrome fights all of them at once.
    *
-   * Not pure black: #0b0710 keeps thumbnails from appearing to float in a void
+   * Not pure black: #0a0a0d keeps posters from appearing to float in a void
    * and stops OLED smearing on scroll.
    */
-  --background: #0b0710;
-  --foreground: #f4eff8;
-  --surface: #140d1c;
-  --surface-muted: #1c1327;
-  --surface-raised: #241933;
-  --surface-brand: #2a1140;
-  --border: #2c2038;
-  --border-strong: #3d2d4f;
+  --background: #0a0a0d;
+  --foreground: #f5f4f6;
+  --surface: #131317;
+  --surface-muted: #1a1a20;
+  --surface-raised: #222229;
+  --surface-brand: #2b1220;
+  --border: #26262e;
+  --border-strong: #3a3a44;
 
   /* Text ramp — four steps, because three always ends with one doing two jobs */
-  --text-primary: #f4eff8;
-  --text-secondary: #bfb0cd;
-  --text-muted: #8a7a99;
-  --text-faint: #5f5370;
+  --text-primary: #f5f4f6;
+  --text-secondary: #b9b7c0;
+  --text-muted: #84828e;
+  --text-faint: #58565f;
 
   /* Status */
   --success: #3ddc97;
   --warning: #ffbe5c;
   --danger: #ff6b6b;
 
-  --brand-gradient: linear-gradient(100deg, var(--brand-deep) 0%, var(--brand) 45%, var(--brand-magenta) 100%);
-  --brand-gradient-warm: linear-gradient(100deg, var(--brand) 0%, var(--brand-magenta) 50%, var(--brand-coral) 100%);
+  --brand-gradient: linear-gradient(100deg, var(--brand-deep) 0%, var(--brand) 55%, var(--brand-coral) 100%);
+  --brand-gradient-warm: linear-gradient(100deg, var(--brand) 0%, var(--brand-coral) 55%, var(--accent-orange) 100%);
 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 8px rgb(0 0 0 / 0.3);
   --shadow-lift: 0 12px 32px -8px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.4);
-  --shadow-brand: 0 6px 24px -6px rgb(175 40 234 / 0.5);
+  --shadow-brand: 0 6px 24px -6px rgb(255 45 111 / 0.45);
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* The bottom tab bar sits over iOS's home indicator without this. */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @theme inline {
@@ -110,21 +108,21 @@
   --color-danger: var(--danger);
 
   /*
-   * Tailwind's violet ramp re-cut around the brand purples, so every stock
-   * `violet-*` class lands on the real brand instead of #7c3aed — close enough
-   * to the brand to read as sloppy printing rather than as a different colour.
+   * Tailwind's violet ramp re-cut around the new brand pinks, so every stock
+   * `violet-*` class written against the old purple lands on the real brand
+   * instead of #7c3aed — close enough to read as one colour system.
    */
-  --color-violet-50: #faf6fe;
-  --color-violet-100: #f5eefc;
-  --color-violet-200: #e9dcf8;
-  --color-violet-300: #d7bcf4;
-  --color-violet-400: #c274f0;
-  --color-violet-500: #b83ded;
-  --color-violet-600: #af28ea;
-  --color-violet-700: #5e148f;
-  --color-violet-800: #4c1075;
-  --color-violet-900: #3d0d5e;
-  --color-violet-950: #26073a;
+  --color-violet-50: #fff5f8;
+  --color-violet-100: #ffebf1;
+  --color-violet-200: #ffd2e0;
+  --color-violet-300: #ffa8c5;
+  --color-violet-400: #ff6d9a;
+  --color-violet-500: #ff477e;
+  --color-violet-600: #ff2d6f;
+  --color-violet-700: #c9184a;
+  --color-violet-800: #a3123c;
+  --color-violet-900: #820e30;
+  --color-violet-950: #4d0719;
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);

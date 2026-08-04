@@ -3,6 +3,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import { dark } from '@clerk/themes'
 import { Geist, Geist_Mono } from 'next/font/google'
 
+import { BottomNav } from '@/components/BottomNav'
 import { Nav } from '@/components/Nav'
 import './globals.css'
 
@@ -11,10 +12,10 @@ const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin']
 
 export const metadata: Metadata = {
   title: {
-    default: 'START Video Library',
-    template: '%s · START Video Library',
+    default: 'START Reels',
+    template: '%s · START Reels',
   },
-  description: 'Stream the START LANDS video library.',
+  description: 'Bingeable vertical short dramas and mini-series from START LANDS.',
 }
 
 export default function RootLayout({
@@ -34,12 +35,12 @@ export default function RootLayout({
         // silently ignored at runtime, so a wrong name looks like "the theme
         // didn't apply" rather than an error.
         variables: {
-          colorPrimary: '#af28ea',
-          colorBackground: '#140d1c',
-          colorForeground: '#f4eff8',
-          colorMutedForeground: '#bfb0cd',
-          colorInput: '#1c1327',
-          colorInputForeground: '#f4eff8',
+          colorPrimary: '#ff2d6f',
+          colorBackground: '#131317',
+          colorForeground: '#f5f4f6',
+          colorMutedForeground: '#b9b7c0',
+          colorInput: '#1a1a20',
+          colorInputForeground: '#f5f4f6',
           borderRadius: '0.6rem',
         },
       }}
@@ -50,7 +51,10 @@ export default function RootLayout({
       >
         <body className="min-h-full flex flex-col bg-background text-ink">
           <Nav />
-          <main className="flex-1">{children}</main>
+          {/* pb clears the fixed bottom tab bar; BottomNav hides itself on
+              routes that don't show it, where the padding is harmless. */}
+          <main className="flex-1 pb-14">{children}</main>
+          <BottomNav />
         </body>
       </html>
     </ClerkProvider>

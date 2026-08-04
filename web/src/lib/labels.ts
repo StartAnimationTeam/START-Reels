@@ -26,14 +26,51 @@ export function roleLabel(roles: string[]): string {
 }
 
 export const LEDGER_REASON_LABELS: Record<string, string> = {
-  signup_grant: 'Welcome credits',
-  daily_reward: 'Daily reward',
-  promo: 'Promotional credits',
+  signup_grant: 'Welcome coins',
+  daily_reward: 'Check-in reward',
+  promo: 'Promo coins',
   admin_grant: 'Granted by an administrator',
   watch_debit: 'Unlocked an episode',
   refund: 'Refunded',
   manual_adjustment: 'Adjustment',
-  top_up: 'Purchased credits',
+  top_up: 'Purchased coins',
+}
+
+/** The bottom tab bar. Order is the bar's order. */
+export const NAV_LABELS = {
+  home: 'Home',
+  feed: 'For You',
+  member: 'Member',
+  myList: 'My List',
+  profile: 'Profile',
+} as const
+
+export const SERIES_STATUS_LABELS: Record<string, string> = {
+  draft: 'Draft',
+  published: 'Published',
+  removed: 'Removed',
+}
+
+/** "EP.3" — the DramaBox register, used on chips and progress lines. */
+export function episodeLabel(n: number): string {
+  return `EP.${n}`
+}
+
+/** "EP.7 / EP.55" — where the viewer is against the whole run. */
+export function episodeProgressLabel(current: number, total: number): string {
+  return `${episodeLabel(current)} / ${episodeLabel(total)}`
+}
+
+/**
+ * Membership is a SHELL until payments exist. The boundary must say so
+ * (trap #15): a visible "coming soon", never a dead Join button.
+ */
+export const MEMBERSHIP_COMING_SOON =
+  'Memberships are coming soon. Until then, every episode unlocks with coins.'
+
+export const MEMBER_TIER_LABELS: Record<string, string> = {
+  weekly: 'Weekly Membership',
+  annual: 'Annual Membership',
 }
 
 export const LEDGER_STATUS_LABELS: Record<string, string> = {
@@ -66,12 +103,15 @@ export const VIDEO_STATUS_LABELS: Record<string, string> = {
  * the thing the user should do next.
  */
 const ERROR_MESSAGES: Record<string, string> = {
-  insufficient_credits: 'You don’t have enough credits to unlock this video',
-  needs_unlock: 'Unlock this video to start watching.',
-  too_many_streams: 'This video is already playing on your other devices. Stop one to continue here.',
+  insufficient_credits: 'You don’t have enough coins to unlock this episode',
+  needs_unlock: 'Unlock this episode to start watching.',
+  too_many_streams: 'This is already playing on your other devices. Stop one to continue here.',
   forbidden: 'You don’t have permission to do that.',
   not_found: 'We couldn’t find that.',
-  video_not_published: 'This video isn’t available right now.',
+  video_not_published: 'This episode isn’t available right now.',
+  episode_number_taken: 'That episode number is already used in this series.',
+  series_not_ready: 'Publish at least one episode before publishing the series.',
+  series_not_found: 'We couldn’t find that series.',
   account_suspended: 'Your account is suspended. Contact support if you think this is a mistake.',
   account_banned: 'Your account has been closed.',
   upload_too_large: 'That file is too large. Check the size limit on the upload page.',
@@ -102,16 +142,27 @@ export function errorLabel(code: string | null | undefined): string {
   return ERROR_MESSAGES[key] ?? 'Something went wrong. Please try again.'
 }
 
-/** Credits are whole numbers in the UI even though the ledger stores numeric. */
+/**
+ * The currency is "coins" EVERYWHERE users see it — a labels-layer rename
+ * only; the database stays credit_* end to end. Whole numbers in the UI even
+ * though the ledger stores numeric.
+ */
 export function creditLabel(amount: number): string {
   const n = Math.abs(amount)
   const rounded = Number.isInteger(n) ? n : Math.round(n * 100) / 100
-  return `${rounded} ${rounded === 1 ? 'credit' : 'credits'}`
+  return `${rounded} ${rounded === 1 ? 'coin' : 'coins'}`
 }
 
 export function tierCostLabel(tier: string, cost: number): string {
   if (tier === 'free' || cost === 0) return 'Free'
   return creditLabel(cost)
+}
+
+/** Pricing line for a series card/detail: how the free window reads. */
+export function seriesPricingLabel(freeCount: number, cost: number): string {
+  if (cost === 0) return 'Free'
+  if (freeCount <= 0) return `${creditLabel(cost)} per episode`
+  return `First ${freeCount === 1 ? 'episode' : `${freeCount} episodes`} free · then ${creditLabel(cost)} each`
 }
 
 /** "2h 14m", "8m 03s", "44s" — never a bare seconds count. */
