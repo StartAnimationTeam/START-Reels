@@ -23,15 +23,15 @@ export default async function AdminOverviewPage() {
 
   const tiles = [
     { label: 'Users', value: users.count ?? 0, href: '/admin/users' },
-    { label: 'Published videos', value: published.count ?? 0, href: '/admin/videos' },
+    { label: 'Published episodes', value: published.count ?? 0, href: '/admin/series' },
     {
       label: 'Awaiting review',
       value: pendingReview.count ?? 0,
-      href: '/admin/videos',
+      href: '/admin/curation',
       highlight: (pendingReview.count ?? 0) > 0,
     },
-    { label: 'Uploading / processing', value: processing.count ?? 0, href: '/admin/videos' },
-    { label: 'Total unlocks', value: unlocks.count ?? 0, href: '/admin/videos' },
+    { label: 'Uploading / processing', value: processing.count ?? 0, href: '/admin/series' },
+    { label: 'Total unlocks', value: unlocks.count ?? 0, href: '/admin/analytics' },
   ]
 
   return (
