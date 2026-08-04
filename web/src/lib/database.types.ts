@@ -443,6 +443,20 @@ export interface Database {
         }
         Relationships: []
       }
+      mv_trending_series: {
+        Row: {
+          id: string
+          slug: string
+          title: string
+          cover_url: string | null
+          free_episode_count: number
+          episode_credit_cost: number
+          is_members_only: boolean
+          total_episodes: number
+          trend_score: number
+        }
+        Relationships: []
+      }
     }
     Functions: {
       claim_daily_reward: {
@@ -463,6 +477,19 @@ export interface Database {
           credit_cost: number
           duration_seconds: number | null
           thumbnail_url: string | null
+        }[]
+      }
+      recommended_series: {
+        Args: { p_limit?: number }
+        Returns: {
+          id: string
+          slug: string
+          title: string
+          cover_url: string | null
+          free_episode_count: number
+          episode_credit_cost: number
+          is_members_only: boolean
+          total_episodes: number
         }[]
       }
     }

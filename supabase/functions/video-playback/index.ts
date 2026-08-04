@@ -50,12 +50,14 @@ Deno.serve(async (req) => {
 
   const db = serviceClient()
 
-  // The hottest abusable endpoint: every call mints a signed URL. 30/min per
-  // user is far above any legitimate player (one mint per play + expiry
-  // refreshes) and far below a token-farming loop.
+  // The hottest abusable endpoint: every call mints a signed URL. 60/min per
+  // user accommodates feed swiping since the series pivot (one mint per
+  // slide; the client caches mints by videoId and prefetches at most one
+  // ahead) while staying far below a token-farming loop — tokens are
+  // per-GUID path-scoped, so each mint exposes one episode.
   const { data: allowed } = await db.rpc('check_rate_limit', {
     p_key: `playback:${userId}`,
-    p_limit: 30,
+    p_limit: 60,
     p_window_seconds: 60,
   })
   if (allowed === false) return fail(req, 'rate_limited', 429)

@@ -37,11 +37,13 @@ Deno.serve(async (req) => {
 
   const db = serviceClient()
 
-  // 20 unlocks/min per user: generous for humans (idempotent re-unlocks are
-  // cheap and common), hostile to scripted entitlement farming.
+  // 40 unlocks/min per user: a binge-viewer tapping "next episode" every few
+  // seconds through free 60-90s episodes is legitimate traffic since the
+  // series pivot (each tap re-unlocks idempotently). Still hostile to
+  // scripted entitlement farming.
   const { data: allowed } = await db.rpc('check_rate_limit', {
     p_key: `unlock:${userId}`,
-    p_limit: 20,
+    p_limit: 40,
     p_window_seconds: 60,
   })
   if (allowed === false) return fail(req, 'rate_limited', 429)

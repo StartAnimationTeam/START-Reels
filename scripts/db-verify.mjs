@@ -237,6 +237,26 @@ const orphans = await sql(`
 `)
 check('every live video belongs to a series (0018 backfill)', orphans[0].n === 0, `${orphans[0].n} orphan(s)`)
 
+// ── series trending MV ────────────────────────────────────────────────────
+// refresh … CONCURRENTLY silently starts failing in the hourly cron if the
+// unique index is missing — assert both halves.
+console.log('\nSeries trending MV:')
+const mvIdx = await sql(`
+  select count(*)::int as n from pg_indexes
+  where schemaname = 'public' and tablename = 'mv_trending_series'
+    and indexdef ilike 'create unique index%'
+`)
+check('mv_trending_series exists with a unique index', mvIdx[0].n >= 1)
+
+let refreshOk = false
+try {
+  await sql(`select public.refresh_trending()`)
+  refreshOk = true
+} catch (err) {
+  check('refresh_trending() runs both MVs', false, err.message)
+}
+if (refreshOk) check('refresh_trending() runs both MVs', true)
+
 // ── pg_cron sweep scheduled ───────────────────────────────────────────────
 console.log('\nNightly sweep:')
 try {

@@ -4,8 +4,13 @@ import { fail, handlePreflight, json } from '../_shared/cors.ts'
 import { serviceClient } from '../_shared/db.ts'
 
 /**
- * POST { title, description?, accessTier?, creditCost? }
- *   → { videoId, upload: { tusEndpoint, headers... } }
+ * POST { title, description?, accessTier?, creditCost?, seriesId?, episodeNumber? }
+ *   → { videoId, episodeNumber?, upload: { tusEndpoint, headers... } }
+ *
+ * With seriesId the upload is an EPISODE: the caller must own the series (or
+ * be staff), the episode number must be free (409 episode_number_taken) or is
+ * auto-assigned max+1, and tier/cost become a DISPLAY SNAPSHOT of the
+ * series-resolved price — the series is the economic truth (0019).
  *
  * Mints a video row + a Bunny TUS authorization so the BROWSER uploads
  * straight to Bunny. Video bytes never pass through Vercel or Supabase —
@@ -55,6 +60,8 @@ Deno.serve(async (req) => {
   let description: string | null
   let accessTier: 'free' | 'premium' | 'exclusive'
   let creditCost: number
+  let seriesId: string | null
+  let episodeNumber: number | null
   try {
     const body = await req.json()
     title = String(body?.title ?? '').trim()
@@ -63,16 +70,67 @@ Deno.serve(async (req) => {
       ? body.accessTier
       : 'free'
     creditCost = Number.isInteger(body?.creditCost) ? body.creditCost : accessTier === 'premium' ? 1 : 0
+    seriesId = typeof body?.seriesId === 'string' && body.seriesId ? body.seriesId : null
+    episodeNumber =
+      Number.isInteger(body?.episodeNumber) && body.episodeNumber >= 1 ? body.episodeNumber : null
     if (!title || title.length > 200) return fail(req, 'bad_request', 400)
-    // The DB CHECK enforces tier<->cost too; validating here just gives a
-    // 400 instead of a 500.
+    // The DB CHECK enforces tier<->cost too (0017 shape: free=0, paid 1..20);
+    // validating here just gives a 400 instead of a 500.
     const ok =
       (accessTier === 'free' && creditCost === 0) ||
-      (accessTier === 'premium' && creditCost === 1) ||
-      (accessTier === 'exclusive' && creditCost >= 2 && creditCost <= 5)
+      (accessTier !== 'free' && creditCost >= 1 && creditCost <= 20)
     if (!ok) return fail(req, 'bad_request', 400)
   } catch {
     return fail(req, 'bad_request', 400)
+  }
+
+  // Episode uploads: resolve the series, its ownership and the number BEFORE
+  // any Bunny object exists, so a refused request leaves nothing behind.
+  let seriesSlug: string | null = null
+  if (seriesId) {
+    const { data: series } = await db
+      .from('series')
+      .select('id, slug, creator_id, status, deleted_at, free_episode_count, episode_credit_cost')
+      .eq('id', seriesId)
+      .maybeSingle()
+    if (!series || series.deleted_at || series.status === 'removed') {
+      return fail(req, 'not_found', 404)
+    }
+    const isStaff = held.includes('administrator') || held.includes('moderator')
+    if (series.creator_id !== userId && !isStaff) return fail(req, 'forbidden', 403)
+
+    const { data: maxRow } = await db
+      .from('videos')
+      .select('episode_number')
+      .eq('series_id', seriesId)
+      .is('deleted_at', null)
+      .order('episode_number', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const nextFree = (maxRow?.episode_number ?? 0) + 1
+
+    if (episodeNumber === null) {
+      episodeNumber = nextFree
+    } else if (episodeNumber < nextFree) {
+      const { data: clash } = await db
+        .from('videos')
+        .select('id')
+        .eq('series_id', seriesId)
+        .eq('episode_number', episodeNumber)
+        .is('deleted_at', null)
+        .maybeSingle()
+      if (clash) return fail(req, 'episode_number_taken', 409)
+    }
+
+    // Display snapshot of the series-resolved price; 0019 is the truth.
+    if (episodeNumber <= series.free_episode_count || series.episode_credit_cost === 0) {
+      accessTier = 'free'
+      creditCost = 0
+    } else {
+      accessTier = 'premium'
+      creditCost = series.episode_credit_cost
+    }
+    seriesSlug = series.slug
   }
 
   // 1. Bunny object first…
@@ -89,7 +147,9 @@ Deno.serve(async (req) => {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60) || 'video'
-  const slug = `${slugBase}-${upload.guid.slice(0, 8)}`
+  const slug = seriesSlug
+    ? `${seriesSlug}-ep-${episodeNumber}-${upload.guid.slice(0, 8)}`
+    : `${slugBase}-${upload.guid.slice(0, 8)}`
 
   const { data: video, error: vidErr } = await db
     .from('videos')
@@ -103,10 +163,19 @@ Deno.serve(async (req) => {
       credit_cost: creditCost,
       provider: 'bunny_stream',
       provider_asset_id: upload.guid,
+      series_id: seriesId,
+      episode_number: seriesId ? episodeNumber : null,
     })
     .select('id')
     .single()
-  if (vidErr) return fail(req, 'upload_row_failed', 500, vidErr.message)
+  if (vidErr) {
+    // Two racing uploads for the same slot: the partial unique index is the
+    // referee; translate its verdict.
+    if (vidErr.message.includes('videos_series_episode_idx')) {
+      return fail(req, 'episode_number_taken', 409)
+    }
+    return fail(req, 'upload_row_failed', 500, vidErr.message)
+  }
 
   const { data: settings } = await db
     .from('platform_settings')
@@ -128,6 +197,7 @@ Deno.serve(async (req) => {
   //    AuthorizationSignature / AuthorizationExpire / VideoId / LibraryId.
   return json(req, {
     videoId: video.id,
+    episodeNumber: seriesId ? episodeNumber : undefined,
     upload: {
       tusEndpoint: upload.tusEndpoint,
       headers: {

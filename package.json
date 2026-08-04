@@ -8,7 +8,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "verify": "node scripts/db-verify.mjs && node scripts/test-rls.mjs && node scripts/test-webhook.mjs && node scripts/test-signup-live.mjs && node scripts/test-entitlements.mjs && node scripts/test-watchtime.mjs && node scripts/test-playback-http.mjs && node scripts/test-wallet.mjs && node scripts/test-creator.mjs && node scripts/test-moderation.mjs && node scripts/test-analytics.mjs && node scripts/test-ratelimit.mjs",
+    "verify": "node scripts/db-verify.mjs && node scripts/test-rls.mjs && node scripts/test-webhook.mjs && node scripts/test-signup-live.mjs && node scripts/test-entitlements.mjs && node scripts/test-series.mjs && node scripts/test-series-manage.mjs && node scripts/test-watchtime.mjs && node scripts/test-playback-http.mjs && node scripts/test-wallet.mjs && node scripts/test-creator.mjs && node scripts/test-moderation.mjs && node scripts/test-analytics.mjs && node scripts/test-ratelimit.mjs",
     "test:rls": "node scripts/test-rls.mjs",
     "test:webhook": "node scripts/test-webhook.mjs",
     "test:signup": "node scripts/test-signup-live.mjs",
