@@ -59,7 +59,7 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
         .eq('series_id', id)
         .is('deleted_at', null)
         .order('episode_number', { ascending: true }),
-      supabase.from('platform_settings').select('value').eq('key', 'max_upload_bytes').maybeSingle(),
+      supabase.from('platform_settings').select('key, value').in('key', ['max_upload_bytes', 'platform_timezone']),
       hasRole('administrator'),
     ])
 
@@ -69,7 +69,9 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
     .map((r) => r.category_id)
   const initialTagIds = (tagRowsRes.data ?? []).map((r) => r.tag_id)
   const episodes = episodesRes.data ?? []
-  const maxBytes = Number(settingsRes.data?.value ?? 5_368_709_120)
+  const setting = (k: string) => settingsRes.data?.find((s) => s.key === k)?.value
+  const maxBytes = Number(setting('max_upload_bytes') ?? 5_368_709_120)
+  const timeZone = String(setting('platform_timezone') ?? 'Asia/Manila').replace(/^"|"$/g, '')
 
   return (
     <div className="space-y-6">
@@ -113,6 +115,7 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
           isFeatured={series.is_featured}
           viewerIsAdmin={viewerIsAdmin}
           scheduledPublishAt={series.scheduled_publish_at}
+          timeZone={timeZone}
         />
       </div>
 

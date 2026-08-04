@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: 'Series' }
 export default async function AdminSeriesPage() {
   const supabase = await createServerSupabase()
 
-  const [{ data: series }, viewerIsAdmin] = await Promise.all([
+  const [{ data: series }, viewerIsAdmin, tzRes] = await Promise.all([
     supabase
       .from('series')
       .select(
@@ -31,9 +31,12 @@ export default async function AdminSeriesPage() {
       .order('created_at', { ascending: false })
       .limit(200),
     hasRole('administrator'),
+    supabase.from('platform_settings').select('value').eq('key', 'platform_timezone').maybeSingle(),
   ])
 
   const rows = series ?? []
+  // Timers read in PLATFORM time (trap #17), not the admin device's clock.
+  const timeZone = String(tzRes.data?.value ?? 'Asia/Manila').replace(/^"|"$/g, '')
 
   return (
     <div>
@@ -85,7 +88,7 @@ export default async function AdminSeriesPage() {
                       }
                     >
                       {s.status === 'draft' && s.scheduled_publish_at
-                        ? `⏱ ${new Date(s.scheduled_publish_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+                        ? `⏱ ${new Date(s.scheduled_publish_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone })}`
                         : (SERIES_STATUS_LABELS[s.status] ?? s.status)}
                     </span>
                   </td>

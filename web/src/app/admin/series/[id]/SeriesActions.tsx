@@ -26,6 +26,7 @@ export function SeriesActions({
   isFeatured,
   viewerIsAdmin,
   scheduledPublishAt,
+  timeZone,
 }: {
   seriesId: string
   title: string
@@ -33,6 +34,7 @@ export function SeriesActions({
   isFeatured: boolean
   viewerIsAdmin: boolean
   scheduledPublishAt: string | null
+  timeZone: string
 }) {
   const api = useAdminApi()
   const router = useRouter()
@@ -74,7 +76,7 @@ export function SeriesActions({
           </p>
         ) : (
           <p className="text-xs" style={{ color: 'var(--warning)' }}>
-            ⏱ {comingSoonLabel(scheduledPublishAt)} — live in Coming Soon
+            ⏱ {comingSoonLabel(scheduledPublishAt, timeZone)} — live in Coming Soon
           </p>
         )
       )}
@@ -149,6 +151,7 @@ export function SeriesActions({
         onClose={() => setPickerOpen(false)}
         busy={busy}
         title={title}
+        timeZone={timeZone}
         onConfirm={(when) =>
           void run(() =>
             api.series('update_series', { seriesId, scheduledPublishAt: when.toISOString() }),

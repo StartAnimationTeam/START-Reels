@@ -167,11 +167,22 @@ export function seriesPricingLabel(freeCount: number, cost: number): string {
   return `First ${freeCount === 1 ? 'episode' : `${freeCount} episodes`} free · then ${creditLabel(cost)} each`
 }
 
-/** "Premieres Aug 12, 8:00 PM" — the Coming Soon promise, viewer-local time. */
-export function comingSoonLabel(iso: string): string {
+/**
+ * "Premieres Aug 12, 8:00 PM" — the Coming Soon promise. Viewer-facing
+ * surfaces omit timeZone (their local premiere moment is the honest one);
+ * ADMIN surfaces pass the platform zone so scheduling reads in PH time with
+ * the zone named (trap #17: never the device clock by accident).
+ */
+export function comingSoonLabel(iso: string, timeZone?: string): string {
   const when = new Date(iso)
   if (Number.isNaN(when.getTime())) return 'Coming soon'
-  return `Premieres ${when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
+  const opts = timeZone ? { timeZone } : {}
+  const zone = timeZone
+    ? ` (${new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' })
+        .formatToParts(when)
+        .find((p) => p.type === 'timeZoneName')?.value ?? timeZone})`
+    : ''
+  return `Premieres ${when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...opts })}, ${when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', ...opts })}${zone}`
 }
 
 /** "2h 14m", "8m 03s", "44s" — never a bare seconds count. */
