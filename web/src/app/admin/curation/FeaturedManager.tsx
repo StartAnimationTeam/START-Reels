@@ -1,7 +1,7 @@
 'use client'
 
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
 
 import { useAdminApi } from '@/lib/admin'
 import { episodeLabel, errorLabel } from '@/lib/labels'
@@ -12,12 +12,17 @@ import { episodeLabel, errorLabel } from '@/lib/labels'
  * order. Moves persist by writing BOTH affected ranks (set_featured, audited
  * per write) — which also self-heals the duplicate rank-1s left by the old
  * per-video Feature button era.
+ *
+ * Every row carries a BANNER slot (set_hero): the hero stage is wide, the
+ * 9:16 poster crops badly on it, so a featured show without a banner gets a
+ * visible nag until one is uploaded. Landscape ~16:9, JPEG/PNG/WebP, ≤1MB.
  */
 
 interface FeaturedRow {
   id: string
   title: string
   cover_url: string | null
+  hero_url: string | null
   status: string
   featured_rank: number | null
   total_episodes: number
@@ -35,6 +40,34 @@ export function FeaturedManager({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pickId, setPickId] = useState('')
+  const bannerInputRef = useRef<HTMLInputElement>(null)
+  const bannerTargetRef = useRef<string | null>(null)
+
+  const uploadBanner = async (file: File | undefined) => {
+    const seriesId = bannerTargetRef.current
+    if (!file || !seriesId) return
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+      setError('bad_request')
+      return
+    }
+    if (file.size > 1_000_000) {
+      setError('upload_too_large')
+      return
+    }
+    await run(async () => {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result))
+        reader.onerror = () => reject(new Error('read_failed'))
+        reader.readAsDataURL(file)
+      })
+      await api.series('set_hero', {
+        seriesId,
+        imageBase64: dataUrl.split(',')[1] ?? '',
+        contentType: file.type,
+      })
+    })
+  }
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true)
@@ -118,11 +151,15 @@ export function FeaturedManager({
               >
                 {index + 1}
               </span>
-              <span className="block h-12 w-8 shrink-0 overflow-hidden rounded border border-line bg-surface-muted">
-                {s.cover_url && (
+              {/* the BANNER slot — what the hero stage actually renders */}
+              <span className="block h-12 w-20 shrink-0 overflow-hidden rounded border border-line bg-surface-muted">
+                {s.hero_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={s.cover_url} alt="" loading="lazy" className="h-full w-full object-cover" />
-                )}
+                  <img src={s.hero_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                ) : s.cover_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={s.cover_url} alt="" loading="lazy" className="h-full w-full object-cover opacity-50" />
+                ) : null}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-ink">{s.title}</p>
@@ -132,10 +169,26 @@ export function FeaturedManager({
                   {s.status !== 'published' && (
                     <span style={{ color: 'var(--warning)' }}> · not published — viewers can’t see it</span>
                   )}
+                  {!s.hero_url && (
+                    <span style={{ color: 'var(--warning)' }}>
+                      {' '}· no banner — the poster will crop on the hero
+                    </span>
+                  )}
                 </p>
               </div>
 
               <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  disabled={busy}
+                  onClick={() => {
+                    bannerTargetRef.current = s.id
+                    bannerInputRef.current?.click()
+                  }}
+                  className={btn}
+                  title="Landscape ~16:9 · JPEG/PNG/WebP · up to 1 MB"
+                >
+                  {s.hero_url ? 'Banner…' : 'Add banner…'}
+                </button>
                 <button disabled={busy || index === 0} onClick={() => move(index, -1)} className={btn} aria-label="Move up">
                   ↑
                 </button>
@@ -159,6 +212,18 @@ export function FeaturedManager({
           ))}
         </ol>
       )}
+
+      {/* one hidden input serves every row's banner button */}
+      <input
+        ref={bannerInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          void uploadBanner(e.target.files?.[0])
+          e.target.value = ''
+        }}
+      />
     </section>
   )
 }

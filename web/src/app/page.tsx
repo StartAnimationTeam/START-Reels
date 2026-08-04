@@ -70,17 +70,20 @@ export default async function HomePage({
 
 type Anon = ReturnType<typeof createAnonSupabase>
 
-function SeriesHero({ series }: { series: CardSeries & { synopsis: string | null } }) {
+function SeriesHero({ series }: { series: CardSeries & { synopsis: string | null; hero_url: string | null } }) {
+  // The dedicated banner when curation uploaded one; the 9:16 poster only
+  // as a fallback (it crops on this wide stage — Curation nags about it).
+  const backdrop = series.hero_url ?? series.cover_url
   return (
     <section
       className="relative -mx-4 overflow-hidden sm:-mx-6 sm:rounded-2xl"
       style={
-        series.cover_url
+        backdrop
           ? {
               backgroundImage:
-                `linear-gradient(75deg, rgb(10 10 13 / 0.94) 30%, rgb(10 10 13 / 0.5) 65%, rgb(10 10 13 / 0.2)), url(${series.cover_url})`,
+                `linear-gradient(75deg, rgb(10 10 13 / 0.94) 30%, rgb(10 10 13 / 0.5) 65%, rgb(10 10 13 / 0.2)), url(${backdrop})`,
               backgroundSize: 'cover',
-              backgroundPosition: 'center 20%',
+              backgroundPosition: series.hero_url ? 'center' : 'center 20%',
             }
           : { background: 'var(--surface-brand)' }
       }

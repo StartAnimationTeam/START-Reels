@@ -95,6 +95,7 @@ export interface Database {
           title: string
           synopsis: string | null
           cover_url: string | null
+          hero_url: string | null
           creator_id: string
           status: SeriesStatus
           free_episode_count: number

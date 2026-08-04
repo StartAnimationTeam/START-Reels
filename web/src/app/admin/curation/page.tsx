@@ -22,7 +22,7 @@ export default async function AdminCurationPage() {
   const [featuredRes, candidatesRes, pendingRes] = await Promise.all([
     supabase
       .from('series')
-      .select('id, title, cover_url, status, featured_rank, total_episodes')
+      .select('id, title, cover_url, hero_url, status, featured_rank, total_episodes')
       .eq('is_featured', true)
       .is('deleted_at', null)
       .neq('status', 'removed')

@@ -11,6 +11,9 @@ import { serviceClient } from '../_shared/db.ts'
  *                     isMembersOnly?, categoryIds?, tagIds? }     creator or staff
  *   update_series   { seriesId, ...same fields }   owner (while draft) or staff
  *   set_cover       { seriesId, imageBase64, contentType }        owner-draft/staff
+ *   set_hero        { seriesId, imageBase64, contentType }        staff — the
+ *                   WIDE banner behind the home hero; covers are 9:16 and
+ *                   crop into soup on that stage
  *   set_featured    { seriesId, featured, rank? }                 staff
  *   publish_series  { seriesId }                                  staff
  *   remove_series   { seriesId, reason? }                         ADMINISTRATOR
@@ -152,7 +155,7 @@ Deno.serve(async (req) => {
 
   const { data: before } = await db
     .from('series')
-    .select('id, slug, title, synopsis, cover_url, creator_id, status, free_episode_count, episode_credit_cost, is_members_only, is_featured, featured_rank, total_episodes, deleted_at')
+    .select('id, slug, title, synopsis, cover_url, hero_url, creator_id, status, free_episode_count, episode_credit_cost, is_members_only, is_featured, featured_rank, total_episodes, deleted_at')
     .eq('id', seriesId)
     .maybeSingle()
   if (!before || before.deleted_at) return fail(req, 'not_found', 404)
@@ -187,12 +190,17 @@ Deno.serve(async (req) => {
       return json(req, { ok: true, series: after })
     }
 
-    case 'set_cover': {
-      if (!isStaff && !ownDraft) return fail(req, 'forbidden', 403)
+    case 'set_cover':
+    case 'set_hero': {
+      // Covers: staff or the owning creator while drafting. Banners: staff
+      // only — they exist for the home hero, which is curation.
+      const isHero = body.action === 'set_hero'
+      if (isHero ? !isStaff : !isStaff && !ownDraft) return fail(req, 'forbidden', 403)
+
       const b64 = String(body.imageBase64 ?? '')
       const contentType = String(body.contentType ?? '')
       if (!/^image\/(jpeg|png|webp)$/.test(contentType)) return fail(req, 'bad_request', 400)
-      // ~1MB decoded cap: covers are 9:16 posters, not masters.
+      // ~1MB decoded cap: display assets, not masters.
       if (!b64 || b64.length > 1_400_000) return fail(req, 'upload_too_large', 413)
 
       let bytes: Uint8Array
@@ -202,8 +210,10 @@ Deno.serve(async (req) => {
         return fail(req, 'bad_request', 400)
       }
 
+      const slot = isHero ? 'hero' : 'cover'
+      const column = isHero ? 'hero_url' : 'cover_url'
       const ext = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg'
-      const path = `${seriesId}/cover-${Date.now()}.${ext}`
+      const path = `${seriesId}/${slot}-${Date.now()}.${ext}`
       const { error: upErr } = await db.storage
         .from('series-covers')
         .upload(path, bytes.buffer as ArrayBuffer, { contentType, upsert: false })
@@ -212,14 +222,14 @@ Deno.serve(async (req) => {
       const { data: pub } = db.storage.from('series-covers').getPublicUrl(path)
       const { data: after, error } = await db
         .from('series')
-        .update({ cover_url: pub.publicUrl })
+        .update({ [column]: pub.publicUrl })
         .eq('id', seriesId)
-        .select('id, cover_url')
+        .select(`id, ${column}`)
         .single()
       if (error) return fail(req, 'update_failed', 500, error.message)
 
-      await audit(db, userId, 'series.set_cover', 'series', seriesId,
-        { cover_url: before.cover_url }, after)
+      await audit(db, userId, `series.set_${slot}`, 'series', seriesId,
+        { [column]: isHero ? before.hero_url : before.cover_url }, after)
       return json(req, { ok: true, series: after })
     }
 

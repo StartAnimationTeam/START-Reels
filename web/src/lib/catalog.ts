@@ -194,17 +194,20 @@ const SERIES_CARD_COLUMNS =
 // show's last episode must not leave a published ghost shell on the home
 // page. The trigger keeps the count honest; trending's MV excludes empties
 // by construction (it joins through episodes).
-export async function featuredSeries(supabase: Client, limit = 8): Promise<(CardSeries & { synopsis: string | null })[]> {
+export async function featuredSeries(
+  supabase: Client,
+  limit = 8,
+): Promise<(CardSeries & { synopsis: string | null; hero_url: string | null })[]> {
   const { data } = await supabase
     .from('series')
-    .select(`${SERIES_CARD_COLUMNS}, synopsis`)
+    .select(`${SERIES_CARD_COLUMNS}, synopsis, hero_url`)
     .eq('status', 'published')
     .is('deleted_at', null)
     .eq('is_featured', true)
     .gt('total_episodes', 0)
     .order('featured_rank', { ascending: true, nullsFirst: false })
     .limit(limit)
-  return (data ?? []) as (CardSeries & { synopsis: string | null })[]
+  return (data ?? []) as (CardSeries & { synopsis: string | null; hero_url: string | null })[]
 }
 
 export async function newSeries(supabase: Client, limit = 12): Promise<CardSeries[]> {
