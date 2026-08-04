@@ -94,7 +94,7 @@ export function VideoActions({
 
       {!confirmingRemove ? (
         <button disabled={busy} className={button} onClick={() => setConfirmingRemove(true)}>
-          Remove
+          Delete…
         </button>
       ) : (
         <button

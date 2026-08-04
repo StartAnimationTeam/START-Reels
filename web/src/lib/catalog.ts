@@ -190,6 +190,10 @@ export interface EpisodeRow {
 const SERIES_CARD_COLUMNS =
   'id, slug, title, cover_url, free_episode_count, episode_credit_cost, is_members_only, total_episodes'
 
+// Public shelves exclude EMPTY series (total_episodes = 0): deleting a
+// show's last episode must not leave a published ghost shell on the home
+// page. The trigger keeps the count honest; trending's MV excludes empties
+// by construction (it joins through episodes).
 export async function featuredSeries(supabase: Client, limit = 8): Promise<(CardSeries & { synopsis: string | null })[]> {
   const { data } = await supabase
     .from('series')
@@ -197,6 +201,7 @@ export async function featuredSeries(supabase: Client, limit = 8): Promise<(Card
     .eq('status', 'published')
     .is('deleted_at', null)
     .eq('is_featured', true)
+    .gt('total_episodes', 0)
     .order('featured_rank', { ascending: true, nullsFirst: false })
     .limit(limit)
   return (data ?? []) as (CardSeries & { synopsis: string | null })[]
@@ -208,6 +213,7 @@ export async function newSeries(supabase: Client, limit = 12): Promise<CardSerie
     .select(SERIES_CARD_COLUMNS)
     .eq('status', 'published')
     .is('deleted_at', null)
+    .gt('total_episodes', 0)
     .order('published_at', { ascending: false })
     .limit(limit)
   return (data ?? []) as CardSeries[]
@@ -259,7 +265,7 @@ export async function seriesInCategory(supabase: Client, categoryId: string, lim
     .limit(limit)
   return ((data ?? []) as unknown as Array<{ series: CardSeries | null }>)
     .map((row) => row.series)
-    .filter((s): s is CardSeries => Boolean(s))
+    .filter((s): s is CardSeries => s !== null && s.total_episodes > 0)
 }
 
 /** Every facet tag, for pickers. The tags table is public-select. */
@@ -289,6 +295,7 @@ export async function searchSeries(supabase: Client, query: string, limit = 24):
     .select(SERIES_CARD_COLUMNS)
     .eq('status', 'published')
     .is('deleted_at', null)
+    .gt('total_episodes', 0)
     .textSearch('search_tsv', q, { type: 'websearch', config: 'english' })
     .limit(limit)
   if (fts?.length) return fts as CardSeries[]
@@ -298,6 +305,7 @@ export async function searchSeries(supabase: Client, query: string, limit = 24):
     .select(SERIES_CARD_COLUMNS)
     .eq('status', 'published')
     .is('deleted_at', null)
+    .gt('total_episodes', 0)
     .ilike('title', `%${q.replace(/[%_]/g, '')}%`)
     .limit(limit)
   return (like ?? []) as CardSeries[]

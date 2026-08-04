@@ -24,6 +24,9 @@ export default async function FeedPage() {
     : await trendingSeries(anon, 12)
   if (!shows.length) shows = await trendingSeries(anon, 12)
   if (!shows.length) shows = await newSeries(anon, 12)
+  // The recommender can surface a series whose last episode was just
+  // deleted; an empty show can't be a slide.
+  shows = shows.filter((s) => s.total_episodes > 0)
 
   if (!shows.length) {
     return <FeedPlayer slides={[]} signedIn={Boolean(userId)} />
