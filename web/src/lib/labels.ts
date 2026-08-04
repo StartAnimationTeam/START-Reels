@@ -110,6 +110,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_found: 'We couldn’t find that.',
   video_not_published: 'This episode isn’t available right now.',
   episode_number_taken: 'That episode number is already used in this series.',
+  category_exists: 'A category with that name already exists.',
+  tag_exists: 'A facet with that name already exists.',
   series_not_ready: 'Publish at least one episode before publishing the series.',
   series_not_found: 'We couldn’t find that series.',
   account_suspended: 'Your account is suspended. Contact support if you think this is a mistake.',
