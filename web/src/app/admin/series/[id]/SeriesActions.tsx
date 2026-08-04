@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 import { useAdminApi } from '@/lib/admin'
-import { errorLabel } from '@/lib/labels'
+import { comingSoonLabel, errorLabel } from '@/lib/labels'
 
 /**
  * Lifecycle buttons. Publish is refused (409 series_not_ready) until at
@@ -12,23 +12,32 @@ import { errorLabel } from '@/lib/labels'
  * a retry after the webhook lands just works. Remove is ADMIN-only, hidden
  * (not disabled) for moderators per the admin/users precedent, and runs the
  * revoke-and-refund path — hence the two-click confirm that says so.
+ *
+ * Schedule sets a release timer on a draft: the series appears in the
+ * public Coming Soon shelf immediately, and the minutely publisher flips it
+ * live at the chosen time (if an episode is ready). Manual Publish always
+ * wins and clears any timer.
  */
 export function SeriesActions({
   seriesId,
   status,
   isFeatured,
   viewerIsAdmin,
+  scheduledPublishAt,
 }: {
   seriesId: string
   status: string
   isFeatured: boolean
   viewerIsAdmin: boolean
+  scheduledPublishAt: string | null
 }) {
   const api = useAdminApi()
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const [scheduling, setScheduling] = useState(false)
+  const [when, setWhen] = useState('')
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true)
@@ -49,7 +58,13 @@ export function SeriesActions({
 
   return (
     <div className="flex flex-col items-end gap-2">
-      <div className="flex flex-wrap items-center gap-2">
+      {status !== 'published' && status !== 'removed' && scheduledPublishAt && (
+        <p className="text-xs" style={{ color: 'var(--warning)' }}>
+          ⏱ {comingSoonLabel(scheduledPublishAt)} — live in Coming Soon
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center justify-end gap-2">
         {status !== 'published' && status !== 'removed' && (
           <button
             disabled={busy}
@@ -57,8 +72,57 @@ export function SeriesActions({
             className="rounded-md px-3 py-1 text-xs font-medium text-white shadow-[var(--shadow-brand)] disabled:opacity-40"
             style={{ background: 'var(--brand-gradient)' }}
           >
-            Publish series
+            Publish now
           </button>
+        )}
+
+        {status !== 'published' && status !== 'removed' && (
+          scheduling ? (
+            <>
+              <input
+                type="datetime-local"
+                value={when}
+                onChange={(e) => setWhen(e.target.value)}
+                className="rounded-lg border border-line-strong bg-surface-muted px-2 py-1 text-xs focus:border-brand focus:outline-none"
+                aria-label="Publish date and time"
+              />
+              <button
+                disabled={busy || !when || new Date(when).getTime() <= Date.now()}
+                onClick={() =>
+                  void run(() =>
+                    api.series('update_series', {
+                      seriesId,
+                      scheduledPublishAt: new Date(when).toISOString(),
+                    }),
+                  ).then(() => setScheduling(false))
+                }
+                className="rounded-md px-2.5 py-1 text-xs font-medium text-white disabled:opacity-40"
+                style={{ background: 'var(--brand-gradient)' }}
+              >
+                Set timer
+              </button>
+              <button disabled={busy} onClick={() => setScheduling(false)} className={btn}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button disabled={busy} onClick={() => setScheduling(true)} className={btn}>
+                {scheduledPublishAt ? 'Reschedule…' : 'Schedule…'}
+              </button>
+              {scheduledPublishAt && (
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    void run(() => api.series('update_series', { seriesId, scheduledPublishAt: null }))
+                  }
+                  className={btn}
+                >
+                  Clear timer
+                </button>
+              )}
+            </>
+          )
         )}
 
         {status === 'published' && (

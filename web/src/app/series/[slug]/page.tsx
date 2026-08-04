@@ -12,7 +12,7 @@ import {
   seriesFacets,
   type SeriesProgressRow,
 } from '@/lib/catalog'
-import { episodeLabel, seriesPricingLabel } from '@/lib/labels'
+import { comingSoonLabel, episodeLabel, seriesPricingLabel } from '@/lib/labels'
 import { createAnonSupabase, createServerSupabase } from '@/lib/supabase-server'
 
 /**
@@ -144,6 +144,17 @@ export default async function SeriesPage({
           <p className="px-4 pb-4 text-sm leading-relaxed text-ink-secondary sm:hidden">{series.synopsis}</p>
         )}
       </div>
+
+      {/* ── coming soon ───────────────────────────────────────────────── */}
+      {series.status === 'draft' && series.scheduled_publish_at && (
+        <p
+          className="mt-5 rounded-xl border px-4 py-3 text-sm font-medium"
+          style={{ borderColor: 'var(--accent-pink)', color: 'var(--accent-pink)' }}
+        >
+          ⏱ {comingSoonLabel(series.scheduled_publish_at)} — follow it and it lands in My List the
+          moment it drops.
+        </p>
+      )}
 
       {/* ── actions ───────────────────────────────────────────────────── */}
       <div className="mt-5 flex items-center gap-3">

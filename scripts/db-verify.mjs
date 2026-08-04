@@ -257,13 +257,15 @@ try {
 }
 if (refreshOk) check('refresh_trending() runs both MVs', true)
 
-// ── pg_cron sweep scheduled ───────────────────────────────────────────────
-console.log('\nNightly sweep:')
-try {
-  const jobs = await sql(`select jobname from cron.job where jobname = 'sweep-stale-holds'`)
-  check('sweep-stale-holds is scheduled in pg_cron', jobs.length === 1)
-} catch {
-  check('sweep-stale-holds is scheduled in pg_cron', false, 'pg_cron schema missing')
+// ── pg_cron jobs scheduled ────────────────────────────────────────────────
+console.log('\nCron jobs:')
+for (const jobname of ['sweep-stale-holds', 'publish-scheduled-series']) {
+  try {
+    const jobs = await sql(`select jobname from cron.job where jobname = '${jobname}'`)
+    check(`${jobname} is scheduled in pg_cron`, jobs.length === 1)
+  } catch {
+    check(`${jobname} is scheduled in pg_cron`, false, 'pg_cron schema missing')
+  }
 }
 
 // ── settings seeded ───────────────────────────────────────────────────────

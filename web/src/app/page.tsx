@@ -6,6 +6,7 @@ import { SeriesCard } from '@/components/SeriesCard'
 import { SeriesRail } from '@/components/SeriesRail'
 import {
   activeCategories,
+  comingSoonSeries,
   continueWatchingSeries,
   featuredSeries,
   newSeries,
@@ -14,7 +15,7 @@ import {
   trendingSeries,
   type CardSeries,
 } from '@/lib/catalog'
-import { creditLabel, episodeLabel, seriesPricingLabel } from '@/lib/labels'
+import { comingSoonLabel, creditLabel, episodeLabel, seriesPricingLabel } from '@/lib/labels'
 import { createAnonSupabase, createServerSupabase } from '@/lib/supabase-server'
 
 /**
@@ -169,16 +170,41 @@ async function PopularTab({ anon, featuredRest }: { anon: Anon; featuredRest: Ca
 }
 
 async function NewTab({ anon }: { anon: Anon }) {
-  const recent = await newSeries(anon, 24)
-  if (!recent.length) {
+  const [recent, upcoming] = await Promise.all([newSeries(anon, 24), comingSoonSeries(anon)])
+
+  if (!recent.length && !upcoming.length) {
     return <p className="text-sm text-ink-muted">Nothing published yet — check back soon.</p>
   }
+
   return (
-    <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
-      {recent.map((s) => (
-        <SeriesCard key={s.id} series={s} />
-      ))}
-    </div>
+    <>
+      {upcoming.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-lg font-semibold tracking-tight">Coming Soon</h2>
+          <div className="no-scrollbar -mx-4 mt-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
+            {upcoming.map((s) => (
+              <div key={s.id} className="w-32 shrink-0 snap-start sm:w-40">
+                <SeriesCard series={s} />
+                <p className="mt-1 text-[11px]" style={{ color: 'var(--accent-pink)' }}>
+                  {comingSoonLabel(s.scheduled_publish_at)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {upcoming.length > 0 && <h2 className="mb-3 text-lg font-semibold tracking-tight">Live Now</h2>}
+      {recent.length === 0 ? (
+        <p className="text-sm text-ink-muted">Nothing published yet — check back soon.</p>
+      ) : (
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
+          {recent.map((s) => (
+            <SeriesCard key={s.id} series={s} />
+          ))}
+        </div>
+      )}
+    </>
   )
 }
 

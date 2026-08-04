@@ -105,6 +105,7 @@ export interface Database {
           is_featured: boolean
           featured_rank: number | null
           published_at: string | null
+          scheduled_publish_at: string | null
           created_at: string
           updated_at: string
           deleted_at: string | null

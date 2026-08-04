@@ -22,7 +22,7 @@ export default async function AdminSeriesPage() {
     supabase
       .from('series')
       .select(
-        'id, slug, title, status, cover_url, free_episode_count, episode_credit_cost, is_members_only, total_episodes, is_featured, featured_rank, published_at, created_at',
+        'id, slug, title, status, cover_url, free_episode_count, episode_credit_cost, is_members_only, total_episodes, is_featured, featured_rank, published_at, scheduled_publish_at, created_at',
       )
       .is('deleted_at', null)
       // The 0018 backfill carried 'removed' over WITHOUT deleted_at; either
@@ -79,10 +79,14 @@ export default async function AdminSeriesPage() {
                           ? { color: 'var(--success)' }
                           : s.status === 'removed'
                             ? { color: 'var(--danger)' }
-                            : undefined
+                            : s.scheduled_publish_at
+                              ? { color: 'var(--warning)' }
+                              : undefined
                       }
                     >
-                      {SERIES_STATUS_LABELS[s.status] ?? s.status}
+                      {s.status === 'draft' && s.scheduled_publish_at
+                        ? `⏱ ${new Date(s.scheduled_publish_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+                        : (SERIES_STATUS_LABELS[s.status] ?? s.status)}
                     </span>
                   </td>
                   <td className="px-4 py-2.5 tabular-nums text-ink-secondary">

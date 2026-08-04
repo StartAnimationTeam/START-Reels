@@ -36,6 +36,8 @@ interface Body {
   freeEpisodeCount?: number
   episodeCreditCost?: number
   isMembersOnly?: boolean
+  /** ISO timestamp to schedule auto-publish; null clears. STAFF only. */
+  scheduledPublishAt?: string | null
   categoryIds?: string[]
   tagIds?: string[]
   imageBase64?: string
@@ -177,6 +179,23 @@ Deno.serve(async (req) => {
       if (pricing.cost !== undefined) patch.episode_credit_cost = pricing.cost
       if (typeof body.isMembersOnly === 'boolean') patch.is_members_only = body.isMembersOnly
 
+      // Scheduling is publish-adjacent, so it is STAFF-only even on a
+      // creator's own draft — same posture as publish_series itself.
+      if (body.scheduledPublishAt !== undefined) {
+        if (!isStaff) return fail(req, 'forbidden', 403)
+        if (body.scheduledPublishAt === null) {
+          patch.scheduled_publish_at = null
+        } else {
+          const when = new Date(String(body.scheduledPublishAt))
+          if (Number.isNaN(when.getTime())) return fail(req, 'bad_request', 400)
+          // A minute of slack; genuinely past dates are a mistake, not a
+          // request for instant publish — that's what the Publish button is.
+          if (when.getTime() < Date.now() - 60_000) return fail(req, 'bad_request', 400)
+          if (before.status === 'published') return fail(req, 'bad_request', 400)
+          patch.scheduled_publish_at = when.toISOString()
+        }
+      }
+
       const { data: after, error } = await db
         .from('series')
         .update(patch)
@@ -264,7 +283,12 @@ Deno.serve(async (req) => {
 
       const { data: after, error } = await db
         .from('series')
-        .update({ status: 'published', published_at: before.status === 'published' ? undefined : new Date().toISOString() })
+        .update({
+          status: 'published',
+          published_at: before.status === 'published' ? undefined : new Date().toISOString(),
+          // Manual publish wins over any pending timer.
+          scheduled_publish_at: null,
+        })
         .eq('id', seriesId)
         .select('id, slug, status, published_at, total_episodes')
         .single()

@@ -40,7 +40,7 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
   const { data: series } = await supabase
     .from('series')
     .select(
-      'id, slug, title, synopsis, cover_url, status, free_episode_count, episode_credit_cost, is_members_only, total_episodes, is_featured, featured_rank, published_at',
+      'id, slug, title, synopsis, cover_url, status, free_episode_count, episode_credit_cost, is_members_only, total_episodes, is_featured, featured_rank, published_at, scheduled_publish_at',
     )
     .eq('id', id)
     .is('deleted_at', null)
@@ -111,6 +111,7 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
           status={series.status}
           isFeatured={series.is_featured}
           viewerIsAdmin={viewerIsAdmin}
+          scheduledPublishAt={series.scheduled_publish_at}
         />
       </div>
 

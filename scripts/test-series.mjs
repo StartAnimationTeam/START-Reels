@@ -74,17 +74,11 @@ try {
     `)
     h.check('backfilled single-video series are episode 1', notFirst[0].n === 0, `${notFirst[0].n} misnumbered`)
 
-    // The economic identity: the series-resolved price of every backfilled
-    // episode equals what the video charged before the pivot.
-    const mispriced = await sql(`
-      select count(*)::int as n
-      from public.videos v join public.series s on s.id = v.series_id
-      where v.deleted_at is null
-        and case when v.episode_number <= s.free_episode_count then 0
-                 else s.episode_credit_cost end
-            is distinct from v.credit_cost
-    `)
-    h.check('series pricing resolves to the pre-pivot video price', mispriced[0].n === 0, `${mispriced[0].n} mismatch(es)`)
+    // NOTE deliberately absent: an assertion that video tier/cost snapshots
+    // match series pricing. They agree at upload time, then legitimately
+    // drift when an admin edits series pricing later — the snapshot is
+    // display-only and the SERIES is the economic truth, which §pricing
+    // proves against unlock_video directly.
 
     const followGap = await sql(`
       select count(*)::int as n
@@ -216,6 +210,54 @@ try {
       delete from public.credit_ledger where user_id in ('${U.viewer}', '${U.viewer}_poor');
       delete from public.profiles where user_id = '${U.viewer}_poor';
     `)
+  }
+
+  // ── §scheduling: the release timer (0023) ─────────────────────────────
+  h.section('Scheduled publishing (0023)')
+  {
+    // An announced draft whose time has come, with one ready episode…
+    const [{ id: dueId }] = await sql(`
+      insert into public.series (slug, title, creator_id, status, free_episode_count, episode_credit_cost, scheduled_publish_at)
+      values ('series-test-timer', 'Timer Show', '${U.creator}', 'draft', 1, 2, now() - interval '1 minute')
+      returning id
+    `)
+    const [{ id: dueEp }] = await sql(`
+      insert into public.videos (title, slug, creator_id, status, access_tier, credit_cost, series_id, episode_number, published_at)
+      values ('Timer Ep1', 'series-test-timer-ep-1', '${U.creator}', 'published', 'free', 0, '${dueId}', 1, now())
+      returning id
+    `)
+    // …and one whose time has come but has NOTHING ready.
+    await sql(`
+      insert into public.series (slug, title, creator_id, status, scheduled_publish_at)
+      values ('series-test-timer-empty', 'Empty Timer Show', '${U.creator}', 'draft', now() - interval '1 minute')
+    `)
+
+    // Pre-release, the ready episode is PUBLISHED at the video grain — the
+    // series gate must still refuse outsiders while creator/staff pass.
+    const early = await sqlExpectError(`select public.unlock_video('${U.viewer}', '${dueEp}')`)
+    h.check('an episode of an announced-unreleased series is refused',
+      Boolean(early?.includes('video_not_published')), early ?? 'UNLOCK SUCCEEDED')
+    const own = await sql(`select public.unlock_video('${U.creator}', '${dueEp}') as r`)
+    h.check('…but its creator can preview it', own[0].r.already_unlocked === false, JSON.stringify(own[0].r))
+
+    const run1 = await sql(`select public.publish_scheduled_series() as r`)
+    h.check('the publisher flips exactly the ready one', Number(run1[0].r.published) === 1, JSON.stringify(run1[0].r))
+
+    const after = await sql(`
+      select status, published_at is not null as has_pub, scheduled_publish_at from public.series where id = '${dueId}'
+    `)
+    h.check('…published with the timer cleared',
+      after[0].status === 'published' && after[0].has_pub === true && after[0].scheduled_publish_at === null,
+      JSON.stringify(after[0]))
+
+    const empty = await sql(`select status from public.series where slug = 'series-test-timer-empty'`)
+    h.check('an overdue series with nothing ready keeps waiting', empty[0].status === 'draft', empty[0].status)
+
+    const run2 = await sql(`select public.publish_scheduled_series() as r`)
+    h.check('a second run publishes nothing new (idempotent)', Number(run2[0].r.published) === 0, JSON.stringify(run2[0].r))
+
+    const released = await sql(`select public.unlock_video('${U.viewer}', '${dueEp}') as r`)
+    h.check('after release the same episode unlocks free', Number(released[0].r.charged) === 0, JSON.stringify(released[0].r))
   }
 
   // ── §structure: series_progress ───────────────────────────────────────

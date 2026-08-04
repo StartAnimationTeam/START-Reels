@@ -176,6 +176,7 @@ export interface SeriesDetail extends CardSeries {
   creator_id: string
   status: Database['public']['Tables']['series']['Row']['status']
   published_at: string | null
+  scheduled_publish_at: string | null
 }
 
 export interface EpisodeRow {
@@ -241,11 +242,31 @@ export async function recommendedSeries(supabase: Client, limit = 12): Promise<C
 export async function seriesBySlug(supabase: Client, slug: string): Promise<SeriesDetail | null> {
   const { data } = await supabase
     .from('series')
-    .select(`${SERIES_CARD_COLUMNS}, synopsis, creator_id, status, published_at`)
+    .select(`${SERIES_CARD_COLUMNS}, synopsis, creator_id, status, published_at, scheduled_publish_at`)
     .eq('slug', slug)
     .is('deleted_at', null)
     .maybeSingle()
   return (data ?? null) as SeriesDetail | null
+}
+
+/**
+ * Announced-but-unreleased shows, soonest premiere first. Visible to anon
+ * through the coming-soon RLS policy (0023); the minutely publisher moves
+ * them to published when their moment arrives.
+ */
+export async function comingSoonSeries(
+  supabase: Client,
+  limit = 12,
+): Promise<Array<CardSeries & { scheduled_publish_at: string }>> {
+  const { data } = await supabase
+    .from('series')
+    .select(`${SERIES_CARD_COLUMNS}, scheduled_publish_at`)
+    .eq('status', 'draft')
+    .not('scheduled_publish_at', 'is', null)
+    .is('deleted_at', null)
+    .order('scheduled_publish_at', { ascending: true })
+    .limit(limit)
+  return (data ?? []) as Array<CardSeries & { scheduled_publish_at: string }>
 }
 
 /** Every published episode of a series, in order. RLS keeps drafts invisible. */

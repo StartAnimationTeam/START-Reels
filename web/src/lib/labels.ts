@@ -167,6 +167,13 @@ export function seriesPricingLabel(freeCount: number, cost: number): string {
   return `First ${freeCount === 1 ? 'episode' : `${freeCount} episodes`} free · then ${creditLabel(cost)} each`
 }
 
+/** "Premieres Aug 12, 8:00 PM" — the Coming Soon promise, viewer-local time. */
+export function comingSoonLabel(iso: string): string {
+  const when = new Date(iso)
+  if (Number.isNaN(when.getTime())) return 'Coming soon'
+  return `Premieres ${when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
+}
+
 /** "2h 14m", "8m 03s", "44s" — never a bare seconds count. */
 export function durationLabel(totalSeconds: number | null | undefined): string {
   if (!totalSeconds || totalSeconds < 0) return '—'
