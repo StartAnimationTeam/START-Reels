@@ -109,9 +109,12 @@ export function SchedulePicker({
   return (
     <Dialog open={open} onClose={onClose} labelledBy="schedule-title">
       <h2 id="schedule-title" className="text-lg font-semibold tracking-tight">
-        Schedule the premiere
+        Publish later
       </h2>
       <p className="mt-1 truncate text-sm text-ink-muted">{title}</p>
+      <p className="mt-1 text-xs text-ink-faint">
+        Pick freely — nothing is scheduled until you press “Publish later” below.
+      </p>
 
       {/* ── quick presets ─────────────────────────────────────────────── */}
       {presets.length > 0 && (
@@ -200,7 +203,7 @@ export function SchedulePicker({
           className="flex-1 rounded-lg px-4 py-2.5 text-sm font-medium text-white shadow-[var(--shadow-brand)] transition-transform enabled:hover:scale-[1.01] disabled:opacity-40"
           style={{ background: 'var(--brand-gradient)' }}
         >
-          {busy ? 'Setting…' : 'Set timer'}
+          {busy ? 'Scheduling…' : 'Publish later'}
         </button>
       </div>
     </Dialog>

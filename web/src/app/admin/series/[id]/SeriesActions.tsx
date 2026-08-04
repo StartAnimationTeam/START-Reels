@@ -83,7 +83,7 @@ export function SeriesActions({
         {status !== 'published' && status !== 'removed' && (
           <>
             <button disabled={busy} onClick={() => setPickerOpen(true)} className={btn}>
-              {scheduledPublishAt ? 'Reschedule…' : 'Schedule…'}
+              {scheduledPublishAt ? 'Reschedule…' : 'Publish later…'}
             </button>
             {scheduledPublishAt && (
               <button
