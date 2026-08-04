@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 /**
- * Series model semantics — structure first (Phase 1 of the pivot), pricing
- * added when 0019 lands.
+ * Series model semantics.
  *
- * §structure
+ * §structure (Phase 1)
  *   - 0018 backfill: every live video belongs to a 1-episode series whose
  *     pricing resolves to exactly what the video cost before the pivot
  *   - favorites became series_follows
@@ -11,6 +10,14 @@
  *   - (series_id, episode_number) is unique among live rows, and a
  *     soft-deleted episode frees its slot
  *   - series_progress derives resume state from watch_history
+ *
+ * §pricing (Phase 2, 0019)
+ *   - an episode inside the free window unlocks free and writes NO ledger row
+ *   - an episode past the window charges series.episode_credit_cost
+ *   - double-unlock is idempotent (charged once)
+ *   - insufficient coins refuses cleanly, no partial state
+ *   - the entitlement horizon is ~permanent (+87600h)
+ *   - a removed series takes its episodes off sale
  *
  * Usage:  node scripts/test-series.mjs
  */
@@ -23,7 +30,7 @@ const h = makeHarness()
 const U = { viewer: 'series_test_viewer', creator: 'series_test_creator' }
 
 async function cleanup() {
-  const ids = Object.values(U).map((u) => `'${u}'`).join(',')
+  const ids = [...Object.values(U), `${U.viewer}_poor`].map((u) => `'${u}'`).join(',')
   await sql(`
     delete from public.watch_sessions where user_id in (${ids});
     delete from public.watch_history where user_id in (${ids});
@@ -136,6 +143,79 @@ try {
       values ('Ep 2 again', 'series-test-ep-2b', '${U.creator}', 'draft', 'premium', 2, '${sid}', 2)
     `)
     h.check('a soft-deleted episode frees its number', !reuse, reuse ?? '')
+  }
+
+  // ── §pricing: the 0019 economy ────────────────────────────────────────
+  h.section('Series pricing (unlock_video, 0019)')
+  {
+    await sql(`
+      select public.grant_credits('${U.viewer}', 10, 'admin_grant', null, null, 'watch', 'series-test-seed', '{}'::jsonb)
+    `)
+
+    // The test show: free_episode_count=1, episode_credit_cost=2.
+    // e1 (ep 1) is inside the window; ep 3 is past it.
+    const free = await sql(`select public.unlock_video('${U.viewer}', '${e1}') as r`)
+    h.check('episode inside the free window unlocks free', Number(free[0].r.charged) === 0, JSON.stringify(free[0].r))
+
+    const freeLedger = await sql(`
+      select count(*)::int as n from public.credit_ledger
+      where user_id = '${U.viewer}' and reason = 'watch_debit'
+    `)
+    h.check('…and writes NO ledger row', freeLedger[0].n === 0, `${freeLedger[0].n} row(s)`)
+
+    const e3 = (await sql(`select id from public.videos where slug = 'series-test-ep-3'`))[0].id
+    const paid = await sql(`select public.unlock_video('${U.viewer}', '${e3}') as r`)
+    h.check(
+      'episode past the window charges episode_credit_cost (2)',
+      Number(paid[0].r.charged) === 2 && paid[0].r.already_unlocked === false,
+      JSON.stringify(paid[0].r),
+    )
+
+    const bal = await sql(`select public.available_credits('${U.viewer}', 'watch') as b`)
+    h.check('balance reflects the hold (10 - 2 = 8)', Number(bal[0].b) === 8, `got ${bal[0].b}`)
+
+    const again = await sql(`select public.unlock_video('${U.viewer}', '${e3}') as r`)
+    h.check(
+      'double-unlock is idempotent (charged 0, already_unlocked)',
+      Number(again[0].r.charged) === 0 && again[0].r.already_unlocked === true,
+      JSON.stringify(again[0].r),
+    )
+
+    const horizon = await sql(`
+      select (expires_at > now() + interval '9 years')::bool as far
+      from public.video_entitlements
+      where user_id = '${U.viewer}' and video_id = '${e3}'
+    `)
+    h.check('the unlock is ~permanent (expires >9 years out)', horizon[0]?.far === true)
+
+    // Insufficient: a fresh user with 1 coin cannot afford a 2-coin episode.
+    await sql(`
+      insert into public.profiles (user_id, email)
+      values ('${U.viewer}_poor', 'series-poor@test.local')
+      on conflict (user_id) do nothing;
+    `)
+    await sql(`
+      select public.grant_credits('${U.viewer}_poor', 1, 'admin_grant', null, null, 'watch', 'series-test-poor-seed', '{}'::jsonb)
+    `)
+    const broke = await sqlExpectError(`select public.unlock_video('${U.viewer}_poor', '${e3}')`)
+    h.check('insufficient coins refuses cleanly', Boolean(broke?.includes('insufficient_credits')), broke ?? 'UNLOCK SUCCEEDED')
+    const noEnt = await sql(`
+      select count(*)::int as n from public.video_entitlements
+      where user_id = '${U.viewer}_poor'
+    `)
+    h.check('…and leaves no partial entitlement', noEnt[0].n === 0, `${noEnt[0].n} row(s)`)
+
+    // A removed series takes its episodes off sale, row status notwithstanding.
+    await sql(`update public.series set status = 'removed' where id = '${sid}'`)
+    const offSale = await sqlExpectError(`select public.unlock_video('${U.viewer}_poor', '${e1}')`)
+    h.check('a removed series is off sale', Boolean(offSale?.includes('not_found')), offSale ?? 'UNLOCK SUCCEEDED')
+    await sql(`update public.series set status = 'published' where id = '${sid}'`)
+
+    await sql(`
+      delete from public.video_entitlements where user_id in ('${U.viewer}', '${U.viewer}_poor');
+      delete from public.credit_ledger where user_id in ('${U.viewer}', '${U.viewer}_poor');
+      delete from public.profiles where user_id = '${U.viewer}_poor';
+    `)
   }
 
   // ── §structure: series_progress ───────────────────────────────────────

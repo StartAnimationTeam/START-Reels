@@ -199,7 +199,7 @@ export interface Database {
         Relationships: []
       }
       daily_reward_claims: {
-        Row: { user_id: string; claim_date: string; amount: number; ledger_id: string; claimed_at: string }
+        Row: { user_id: string; claim_date: string; amount: number; ledger_id: string; claimed_at: string; streak_day: number }
         Insert: never
         Update: never
         Relationships: []
@@ -447,7 +447,7 @@ export interface Database {
     Functions: {
       claim_daily_reward: {
         Args: Record<string, never>
-        Returns: { claimed: number; date: string }
+        Returns: { claimed: number; date: string; streak_day: number; next_amount: number }
       }
       redeem_promo: {
         Args: { p_code: string }

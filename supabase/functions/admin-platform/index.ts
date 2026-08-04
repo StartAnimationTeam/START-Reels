@@ -20,9 +20,16 @@ const SETTING_RULES: Record<string, (v: unknown) => boolean> = {
   signup_grant_credits: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 100,
   daily_reward_amount: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 20,
   daily_reward_enabled: (v) => typeof v === 'boolean',
-  entitlement_window_hours: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 720,
+  // 131400h = 15 years. Since the series pivot (0019) unlocks are effectively
+  // permanent (87600h); the old 720 cap would make the live value unsettable
+  // from this very endpoint.
+  entitlement_window_hours: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 131400,
   settle_after_seconds: (v) => Number.isInteger(v) && (v as number) >= 5 && (v as number) <= 600,
   max_concurrent_streams: (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 10,
+  // Check-in ladder: exactly 7 positive-int rungs (0020 cycles past day 7).
+  daily_reward_ladder: (v) =>
+    Array.isArray(v) && v.length === 7 &&
+    v.every((n) => Number.isInteger(n) && n >= 1 && n <= 50),
 }
 
 interface Body {

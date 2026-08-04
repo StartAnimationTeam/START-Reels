@@ -103,14 +103,16 @@ try {
     // Assert on the LEDGER, not the balance delta — the live signup webhook
     // grants +10 on its own schedule and races any before/after read. The
     // precise claim is: exactly ONE daily_reward row exists, at the right
-    // amount, however many raced calls were made.
-    const amount = Number((await sql(`select value #>> '{}' as v from public.platform_settings where key = 'daily_reward_amount'`))[0].v)
+    // amount, however many raced calls were made. Since 0020, day 1 pays
+    // ladder rung 1.
+    const ladder = (await sql(`select value as v from public.platform_settings where key = 'daily_reward_ladder'`))[0].v
+    const amount = Number(ladder[0])
     const rows = await sql(`
       select count(*)::int as n, coalesce(sum(amount), 0) as total
       from public.credit_ledger
       where user_id = '${alice.id}' and reason = 'daily_reward'
     `)
-    h.check(`exactly one daily_reward ledger row, worth ${amount}`,
+    h.check(`exactly one daily_reward ledger row, worth ladder day-1 (${amount})`,
       rows[0].n === 1 && Number(rows[0].total) === amount,
       `${rows[0].n} rows totalling ${rows[0].total}`)
     void base
@@ -120,6 +122,57 @@ try {
 
     const anon = await rpc('claim_daily_reward', null)
     h.check('anonymous claim is refused', anon.status !== 200, `HTTP ${anon.status}`)
+  }
+
+  h.section('Check-in streak (0020)')
+  {
+    // Yesterday cannot be waited for; it can be manufactured. Backdate the
+    // day-1 claim row and claim again: the streak must continue at day 2 and
+    // pay ladder rung 2.
+    const ladder = (await sql(`select value as v from public.platform_settings where key = 'daily_reward_ladder'`))[0].v
+
+    await sql(`
+      update public.daily_reward_claims
+      set claim_date = claim_date - 1
+      where user_id = '${alice.id}'
+    `)
+    const day2 = await rpc('claim_daily_reward', alice.jwt)
+    h.check('a consecutive-day claim continues the streak (day 2)',
+      day2.status === 200 && Number(day2.data?.streak_day) === 2,
+      JSON.stringify(day2.data))
+    h.check(`…and pays ladder rung 2 (${ladder[1]})`,
+      Number(day2.data?.claimed) === Number(ladder[1]),
+      JSON.stringify(day2.data))
+    h.check('…and announces tomorrow (next_amount = rung 3)',
+      Number(day2.data?.next_amount) === Number(ladder[2]),
+      JSON.stringify(day2.data))
+
+    // A gap resets: push both rows 3 days back, claim again → day 1.
+    await sql(`
+      update public.daily_reward_claims
+      set claim_date = claim_date - 3
+      where user_id = '${alice.id}'
+    `)
+    const reset = await rpc('claim_daily_reward', alice.jwt)
+    h.check('a missed day resets the streak to day 1',
+      reset.status === 200 && Number(reset.data?.streak_day) === 1,
+      JSON.stringify(reset.data))
+
+    // Day 8 cycles back to rung 1: manufacture a day-7 yesterday.
+    await sql(`
+      delete from public.daily_reward_claims where user_id = '${bob.id}';
+      insert into public.daily_reward_claims (user_id, claim_date, amount, ledger_id, streak_day)
+      values ('${bob.id}',
+              ((now() at time zone (select value #>> '{}' from public.platform_settings where key = 'platform_timezone'))::date - 1),
+              1, gen_random_uuid(), 7);
+    `)
+    const day8 = await rpc('claim_daily_reward', bob.jwt)
+    h.check('day 8 continues the streak…',
+      day8.status === 200 && Number(day8.data?.streak_day) === 8,
+      JSON.stringify(day8.data))
+    h.check(`…but cycles back to rung 1 (${ladder[0]})`,
+      Number(day8.data?.claimed) === Number(ladder[0]),
+      JSON.stringify(day8.data))
   }
 
   h.section('Promo codes')

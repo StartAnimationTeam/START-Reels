@@ -30,7 +30,7 @@ export const LEDGER_REASON_LABELS: Record<string, string> = {
   daily_reward: 'Daily reward',
   promo: 'Promotional credits',
   admin_grant: 'Granted by an administrator',
-  watch_debit: 'Unlocked a video',
+  watch_debit: 'Unlocked an episode',
   refund: 'Refunded',
   manual_adjustment: 'Adjustment',
   top_up: 'Purchased credits',
@@ -89,7 +89,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   upload_create_failed: 'Couldn’t start the upload. Try again in a moment.',
   upload_failed: 'The upload failed partway. Choosing the same file will resume it.',
   video_not_ready: 'This video hasn’t finished processing yet.',
-  tier_cost_mismatch: 'That price doesn’t match the tier: free is 0, premium is 1, exclusive is 2–5.',
+  tier_cost_mismatch: 'That price doesn’t match the tier: free is 0, paid tiers are 1–20.',
   ledger_hold_not_found_or_already_settled: 'That charge was already settled.',
 }
 

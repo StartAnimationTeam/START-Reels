@@ -254,7 +254,22 @@ check('settings seeded', settings[0].n >= 12, `found ${settings[0].n}`)
 const window = await sql(`
   select value #>> '{}' as v from public.platform_settings where key = 'entitlement_window_hours'
 `)
-check('entitlement window is 48h', window[0]?.v === '48', `got ${window[0]?.v}`)
+check('entitlement window is ~permanent (87600h, the 0019 pivot)', window[0]?.v === '87600', `got ${window[0]?.v}`)
+
+const settle = await sql(`
+  select value #>> '{}' as v from public.platform_settings where key = 'settle_after_seconds'
+`)
+check('settle threshold retuned for short episodes (10s)', settle[0]?.v === '10', `got ${settle[0]?.v}`)
+
+const ladder = await sql(`
+  select value as v from public.platform_settings where key = 'daily_reward_ladder'
+`)
+const rungs = ladder[0]?.v
+check(
+  'daily_reward_ladder is 7 positive-int rungs',
+  Array.isArray(rungs) && rungs.length === 7 && rungs.every((n) => Number.isInteger(n) && n >= 1),
+  `got ${JSON.stringify(rungs)}`,
+)
 
 // ── ledger round trip ─────────────────────────────────────────────────────
 console.log('\nLedger behaviour:')

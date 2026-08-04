@@ -161,7 +161,7 @@ export function WatchGate({
               <p className="mt-2 text-sm text-ink-secondary">
                 {creditCost === 0
                   ? 'Free to watch.'
-                  : `Unlocking costs ${creditLabel(creditCost)} and lasts 48 hours — rewatch, seek and switch devices freely.`}
+                  : `Unlocking costs ${creditLabel(creditCost)} — then it’s yours to rewatch, seek and switch devices freely.`}
               </p>
               <button
                 onClick={() => void unlock()}
