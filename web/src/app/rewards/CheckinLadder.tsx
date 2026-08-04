@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
+import { announceCoinsDelta } from '@/lib/coins'
 import { useSupabase } from '@/lib/supabase-browser'
 import { creditLabel, errorLabel } from '@/lib/labels'
 
@@ -43,6 +44,7 @@ export function CheckinLadder({
         ok: true,
         text: `Day ${data?.streak_day}: ${creditLabel(Number(data?.claimed ?? 0))} claimed — tomorrow pays ${creditLabel(Number(data?.next_amount ?? 0))}.`,
       })
+      announceCoinsDelta(Number(data?.claimed ?? 0))
       router.refresh()
     }
     setBusy(false)

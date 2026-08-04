@@ -41,6 +41,17 @@ export default async function HomePage({
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-24 pt-4 sm:px-6">
+      {/* The main-screen search entry: looks like a field, acts like a link.
+          Tapping lands on /search with the real input focused — one tap,
+          keyboard up, no dead weight of a live search on the home render. */}
+      <Link
+        href="/search"
+        className="mb-4 flex items-center gap-2 rounded-lg border border-line-strong bg-surface-muted px-4 py-2.5 text-sm text-ink-faint transition-colors hover:border-brand hover:text-ink-muted"
+      >
+        <span aria-hidden>⌕</span>
+        Search dramas — “Secret Baby”, “Revenge”…
+      </Link>
+
       {hero && tab === 'popular' && <SeriesHero series={hero} />}
 
       <div className={hero && tab === 'popular' ? 'mt-8' : 'mt-2'}>

@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react'
 
 import { ApiError, useApi, type PlaybackResult } from '@/lib/api'
+import { announceCoinsDelta } from '@/lib/coins'
 
 /**
  * The unlock-and-play state machine, extracted from the old WatchGate so the
@@ -44,7 +45,10 @@ export function useUnlock(videoId: string, initiallyEntitled: boolean) {
   const unlock = useCallback(async () => {
     setState({ kind: 'unlocking' })
     try {
-      await api.unlockVideo(videoId)
+      const result = await api.unlockVideo(videoId)
+      // The nav badge updates the moment the charge lands, not at the next
+      // page load. Free/idempotent unlocks charge 0 and announce nothing.
+      if (result.charged > 0) announceCoinsDelta(-result.charged)
       await startPlayback()
     } catch (err) {
       setState({ kind: 'error', code: err instanceof ApiError ? err.code : 'unknown_error' })

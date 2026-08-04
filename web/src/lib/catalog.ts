@@ -285,30 +285,83 @@ export async function seriesFacets(supabase: Client, seriesId: string): Promise<
     .filter((t): t is { id: string; slug: string; name: string } => Boolean(t))
 }
 
-/** FTS at the series grain — one hit per show, never fifty episode rows. */
-export async function searchSeries(supabase: Client, query: string, limit = 24): Promise<CardSeries[]> {
+export interface SeriesFilters {
+  categoryId?: string
+  tagId?: string
+  /**
+   * free = the WHOLE run is watchable without coins (zero cost, or the free
+   * window covers every episode); paid = some episodes cost coins; vip =
+   * members-only. Free/paid compare two columns, which PostgREST filters
+   * can't — that dimension is applied after the fetch.
+   */
+  access?: 'free' | 'paid' | 'vip'
+}
+
+const isEntirelyFree = (s: CardSeries) =>
+  s.episode_credit_cost === 0 || s.free_episode_count >= s.total_episodes
+
+function applyAccess(rows: CardSeries[], access: SeriesFilters['access'], limit: number): CardSeries[] {
+  if (access === 'free') return rows.filter(isEntirelyFree).slice(0, limit)
+  if (access === 'paid') return rows.filter((s) => !isEntirelyFree(s)).slice(0, limit)
+  return rows.slice(0, limit)
+}
+
+/**
+ * Search-and-discover at the series grain — one hit per show, never fifty
+ * episode rows. Filters compose with the text query, and an EMPTY query
+ * with filters is a browse: "everything in Romance that's free" is a
+ * legitimate search with no words in it.
+ *
+ * Category/facet filtering rides PostgREST inner-join embeds; the join
+ * columns are only requested when their filter is active.
+ */
+export async function searchSeries(
+  supabase: Client,
+  query: string,
+  filters: SeriesFilters = {},
+  limit = 24,
+): Promise<CardSeries[]> {
   const q = query.trim().slice(0, 100)
-  if (!q) return []
 
-  const { data: fts } = await supabase
-    .from('series')
-    .select(SERIES_CARD_COLUMNS)
-    .eq('status', 'published')
-    .is('deleted_at', null)
-    .gt('total_episodes', 0)
+  const base = () => {
+    const cols = [
+      SERIES_CARD_COLUMNS,
+      filters.categoryId ? 'series_categories!inner(category_id)' : null,
+      filters.tagId ? 'series_tags!inner(tag_id)' : null,
+    ]
+      .filter(Boolean)
+      .join(', ')
+
+    let qb = supabase
+      .from('series')
+      .select(cols)
+      .eq('status', 'published')
+      .is('deleted_at', null)
+      .gt('total_episodes', 0)
+    if (filters.categoryId) qb = qb.eq('series_categories.category_id', filters.categoryId)
+    if (filters.tagId) qb = qb.eq('series_tags.tag_id', filters.tagId)
+    if (filters.access === 'vip') qb = qb.eq('is_members_only', true)
+    return qb
+  }
+
+  // free/paid post-filter needs headroom: over-fetch, then trim to limit.
+  const fetchLimit = filters.access === 'free' || filters.access === 'paid' ? limit * 4 : limit
+
+  if (!q) {
+    const { data } = await base().order('published_at', { ascending: false }).limit(fetchLimit)
+    return applyAccess((data ?? []) as unknown as CardSeries[], filters.access, limit)
+  }
+
+  const { data: fts } = await base()
     .textSearch('search_tsv', q, { type: 'websearch', config: 'english' })
-    .limit(limit)
-  if (fts?.length) return fts as CardSeries[]
+    .limit(fetchLimit)
+  const ftsHits = applyAccess((fts ?? []) as unknown as CardSeries[], filters.access, limit)
+  if (ftsHits.length) return ftsHits
 
-  const { data: like } = await supabase
-    .from('series')
-    .select(SERIES_CARD_COLUMNS)
-    .eq('status', 'published')
-    .is('deleted_at', null)
-    .gt('total_episodes', 0)
+  const { data: like } = await base()
     .ilike('title', `%${q.replace(/[%_]/g, '')}%`)
-    .limit(limit)
-  return (like ?? []) as CardSeries[]
+    .limit(fetchLimit)
+  return applyAccess((like ?? []) as unknown as CardSeries[], filters.access, limit)
 }
 
 /** My List: followed series, newest follow first. */

@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
+import { announceCoinsDelta } from '@/lib/coins'
 import { useSupabase } from '@/lib/supabase-browser'
 import { creditLabel, errorLabel } from '@/lib/labels'
 
@@ -37,6 +38,7 @@ export function WalletActions({
       setMessage({ ok: false, text: errorLabel(error.message) })
     } else {
       setMessage({ ok: true, text: `Claimed ${creditLabel(Number(data?.claimed ?? rewardAmount))} — see you tomorrow.` })
+      announceCoinsDelta(Number(data?.claimed ?? 0))
       router.refresh()
     }
     setBusy(false)
@@ -55,6 +57,7 @@ export function WalletActions({
       setMessage({ ok: false, text: errorLabel(failCode) })
     } else {
       setMessage({ ok: true, text: `“${data?.name}” added ${creditLabel(Number(data?.granted ?? 0))}.` })
+      announceCoinsDelta(Number(data?.granted ?? 0))
       setCode('')
       router.refresh()
     }

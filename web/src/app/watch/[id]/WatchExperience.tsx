@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { StreamPlayer } from '@/components/player/StreamPlayer'
 import { UnlockDialog } from '@/components/UnlockDialog'
 import { ApiError, useApi } from '@/lib/api'
+import { announceCoinsDelta } from '@/lib/coins'
 import { useUnlock } from '@/hooks/useUnlock'
 import { creditLabel, episodeLabel, episodeProgressLabel, errorLabel } from '@/lib/labels'
 
@@ -94,7 +95,8 @@ export function WatchExperience({
     setDialogBusy(true)
     setDialogError(null)
     try {
-      await api.unlockVideo(dialogFor.id)
+      const result = await api.unlockVideo(dialogFor.id)
+      if (result.charged > 0) announceCoinsDelta(-result.charged)
       setDialogFor(null)
       router.push(`/watch/${dialogFor.id}`)
     } catch (err) {
