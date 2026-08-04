@@ -19,6 +19,8 @@ export interface UploadTicket {
   videoId: string
   /** Present on episode uploads: the number the server assigned. */
   episodeNumber?: number
+  /** The final title — server-named "<series> - EP<n>" when none was sent. */
+  title?: string
   upload: {
     tusEndpoint: string
     headers: {
@@ -56,7 +58,8 @@ export function useAdminApi() {
     // tickets strictly one at a time) and overwrites tier/cost with the
     // series-resolved price, so episode callers omit them.
     createUpload: (meta: {
-      title: string
+      /** Optional on episode uploads: the series names them "<title> - EP<n>". */
+      title?: string
       description?: string
       accessTier?: AccessTier
       creditCost?: number

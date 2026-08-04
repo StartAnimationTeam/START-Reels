@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
 import { useAdminApi, type UploadTicket } from '@/lib/admin'
-import { titleFromFilename, uploadToBunny } from '@/lib/upload'
+import { uploadToBunny } from '@/lib/upload'
 import { episodeLabel, errorLabel } from '@/lib/labels'
 
 /**
@@ -39,10 +39,12 @@ interface QueueItem {
 
 export function EpisodeQueue({
   seriesId,
+  seriesTitle,
   maxBytes,
   seriesRemoved,
 }: {
   seriesId: string
+  seriesTitle: string
   maxBytes: number
   seriesRemoved: boolean
 }) {
@@ -80,7 +82,9 @@ export function EpisodeQueue({
         accepted.push({
           key: `${file.name}:${file.size}:${crypto.randomUUID().slice(0, 8)}`,
           file,
-          title: titleFromFilename(file.name),
+          // Empty = AUTO: the server names it "<series title> - EP<n>" the
+          // moment the number is assigned. Typing here overrides.
+          title: '',
           status: 'pending',
           pct: 0,
         })
@@ -100,8 +104,16 @@ export function EpisodeQueue({
       let ticket = item.ticket
       if (!ticket) {
         patch(key, { status: 'creating', errorCode: undefined, errorDetail: undefined })
-        ticket = await api.createUpload({ title: item.title.trim() || 'Episode', seriesId })
-        patch(key, { ticket, episodeNumber: ticket.episodeNumber })
+        ticket = await api.createUpload({
+          // Omitted title = the series names it "<title> - EP<n>".
+          title: item.title.trim() || undefined,
+          seriesId,
+        })
+        patch(key, {
+          ticket,
+          episodeNumber: ticket.episodeNumber,
+          ...(item.title.trim() ? {} : { title: ticket.title ?? '' }),
+        })
       }
       patch(key, { status: 'uploading', pct: 0 })
       await uploadToBunny(item.file, ticket, (pct) => patch(key, { pct }))
@@ -200,10 +212,13 @@ export function EpisodeQueue({
                   <input
                     value={item.title}
                     onChange={(e) => patch(item.key, { title: e.target.value.slice(0, 200) })}
-                    className="min-w-0 flex-1 rounded-lg border border-line-strong bg-surface-muted px-2.5 py-1.5 text-sm focus:border-brand focus:outline-none"
+                    placeholder={`Auto: ${seriesTitle} - EP…`}
+                    className="min-w-0 flex-1 rounded-lg border border-line-strong bg-surface-muted px-2.5 py-1.5 text-sm placeholder:text-ink-faint focus:border-brand focus:outline-none"
                   />
                 ) : (
-                  <span className="min-w-0 flex-1 truncate text-sm text-ink">{item.title}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-ink">
+                    {item.title || `${seriesTitle} - EP…`}
+                  </span>
                 )}
 
                 <span className="shrink-0 text-xs text-ink-muted">

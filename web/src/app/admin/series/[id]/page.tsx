@@ -148,6 +148,7 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
       {/* ── upload queue ───────────────────────────────────────────────── */}
       <EpisodeQueue
         seriesId={series.id}
+        seriesTitle={series.title}
         maxBytes={maxBytes}
         seriesRemoved={series.status === 'removed'}
       />

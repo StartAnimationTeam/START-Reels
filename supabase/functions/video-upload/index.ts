@@ -73,7 +73,10 @@ Deno.serve(async (req) => {
     seriesId = typeof body?.seriesId === 'string' && body.seriesId ? body.seriesId : null
     episodeNumber =
       Number.isInteger(body?.episodeNumber) && body.episodeNumber >= 1 ? body.episodeNumber : null
-    if (!title || title.length > 200) return fail(req, 'bad_request', 400)
+    // Episodes may arrive UNTITLED: the series names them below —
+    // "<series title> - EP<n>" — once the number is known. Standalone
+    // uploads still need their own title.
+    if ((!title && !seriesId) || title.length > 200) return fail(req, 'bad_request', 400)
     // The DB CHECK enforces tier<->cost too (0017 shape: free=0, paid 1..20);
     // validating here just gives a 400 instead of a 500.
     const ok =
@@ -90,7 +93,7 @@ Deno.serve(async (req) => {
   if (seriesId) {
     const { data: series } = await db
       .from('series')
-      .select('id, slug, creator_id, status, deleted_at, free_episode_count, episode_credit_cost')
+      .select('id, slug, title, creator_id, status, deleted_at, free_episode_count, episode_credit_cost')
       .eq('id', seriesId)
       .maybeSingle()
     if (!series || series.deleted_at || series.status === 'removed') {
@@ -133,6 +136,10 @@ Deno.serve(async (req) => {
       creditCost = series.episode_credit_cost
     }
     seriesSlug = series.slug
+
+    // The series names its episodes: an untitled upload becomes
+    // "<series title> - EP<n>". A caller-provided title still wins.
+    if (!title) title = `${series.title} - EP${epNumber}`.slice(0, 200)
   }
 
   // 1. Bunny object first…
@@ -203,6 +210,7 @@ Deno.serve(async (req) => {
   return json(req, {
     videoId: video.id,
     episodeNumber: seriesId ? episodeNumber : undefined,
+    title,
     upload: {
       tusEndpoint: upload.tusEndpoint,
       headers: {
