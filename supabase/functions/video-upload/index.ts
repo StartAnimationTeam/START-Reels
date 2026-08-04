@@ -1,5 +1,5 @@
 import { AuthError, requireUser } from '../_shared/auth.ts'
-import { createDirectUpload, isConfigured } from '../_shared/bunny.ts'
+import { createDirectUpload, deleteVideo, isConfigured } from '../_shared/bunny.ts'
 import { fail, handlePreflight, json } from '../_shared/cors.ts'
 import { serviceClient } from '../_shared/db.ts'
 
@@ -171,6 +171,9 @@ Deno.serve(async (req) => {
     .select('id')
     .single()
   if (vidErr) {
+    // OUR row failed after the Bunny object was created — reap the object
+    // or it becomes an unfindable orphan that bills forever (trap #1).
+    await deleteVideo(upload.guid).catch(() => {})
     // Two racing uploads for the same slot: the partial unique index is the
     // referee; translate its verdict.
     if (vidErr.message.includes('videos_series_episode_idx')) {

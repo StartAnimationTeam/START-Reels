@@ -164,6 +164,20 @@ export async function fetchVideo(guid: string): Promise<{
   }
 }
 
+/**
+ * Delete the video OBJECT from Bunny — master, renditions, thumbnails, the
+ * lot. Bunny bills for stored GB (trap #1), so a platform-side removal that
+ * leaves the asset behind keeps paying rent forever. Idempotent by intent:
+ * a 404 means it's already gone, which is the outcome we wanted.
+ */
+export async function deleteVideo(guid: string): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/${LIBRARY_ID}/videos/${guid}`, {
+    method: 'DELETE',
+    headers: { AccessKey: API_KEY! },
+  })
+  return res.ok || res.status === 404
+}
+
 /** Bunny status codes → our video_status. */
 export function mapBunnyStatus(status: number): 'processing' | 'ready' | 'failed' {
   // 0 queued, 1 processing, 2 encoding, 3 finished, 4 resolution finished,

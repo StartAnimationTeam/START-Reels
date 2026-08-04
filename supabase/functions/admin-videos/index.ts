@@ -1,5 +1,6 @@
 import { AuthError } from '../_shared/auth.ts'
 import { audit, requireStaffContext } from '../_shared/admin.ts'
+import { deleteVideo, isConfigured } from '../_shared/bunny.ts'
 import { fail, handlePreflight, json } from '../_shared/cors.ts'
 import { serviceClient } from '../_shared/db.ts'
 
@@ -151,11 +152,30 @@ Deno.serve(async (req) => {
     return fail(req, 'update_failed', 500, updateErr.message)
   }
 
+  // Removal also deletes the Bunny OBJECT — stored GB bills forever
+  // otherwise (trap #1). After the refunds and the row update, best-effort:
+  // a Bunny hiccup must not undo a completed removal, and the soft-deleted
+  // row keeps its GUID so an orphan stays findable.
+  let bunnyDeleted: boolean | null = null
+  if (body.action === 'remove' && before.provider_asset_id && isConfigured()) {
+    try {
+      bunnyDeleted = await deleteVideo(before.provider_asset_id)
+    } catch {
+      bunnyDeleted = false
+    }
+  }
+
   const { provider_asset_id: _guid, ...beforeSafe } = before
   await audit(db, ctx.userId, auditAction, 'video', videoId, beforeSafe, {
     ...after,
     ...(refunded !== null ? { entitlements_revoked: refunded } : {}),
+    ...(bunnyDeleted !== null ? { bunny_deleted: bunnyDeleted } : {}),
   })
 
-  return json(req, { ok: true, video: after, ...(refunded !== null ? { entitlements_revoked: refunded } : {}) })
+  return json(req, {
+    ok: true,
+    video: after,
+    ...(refunded !== null ? { entitlements_revoked: refunded } : {}),
+    ...(bunnyDeleted !== null ? { bunny_deleted: bunnyDeleted } : {}),
+  })
 })

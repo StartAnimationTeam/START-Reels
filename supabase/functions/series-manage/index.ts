@@ -1,5 +1,6 @@
 import { AuthError, requireUser } from '../_shared/auth.ts'
 import { audit } from '../_shared/admin.ts'
+import { deleteVideo, isConfigured } from '../_shared/bunny.ts'
 import { fail, handlePreflight, json } from '../_shared/cors.ts'
 import { serviceClient } from '../_shared/db.ts'
 
@@ -306,7 +307,7 @@ Deno.serve(async (req) => {
       // than paid-for-but-gone.
       const { data: episodes } = await db
         .from('videos')
-        .select('id')
+        .select('id, provider_asset_id')
         .eq('series_id', seriesId)
         .is('deleted_at', null)
       let revoked = 0
@@ -335,11 +336,39 @@ Deno.serve(async (req) => {
         .single()
       if (error) return fail(req, 'update_failed', 500, error.message)
 
+      // Bunny bills for STORED GB: delete the assets too, AFTER the money
+      // and rows are settled. Best-effort per object — a Bunny hiccup must
+      // not undo a completed removal — but failures are counted in the
+      // audit, and the soft-deleted rows keep their GUIDs so an orphan can
+      // always be found and reaped later.
+      let bunnyDeleted = 0
+      let bunnyFailed = 0
+      if (isConfigured()) {
+        for (const ep of episodes ?? []) {
+          if (!ep.provider_asset_id) continue
+          try {
+            const ok = await deleteVideo(ep.provider_asset_id)
+            if (ok) bunnyDeleted++
+            else bunnyFailed++
+          } catch {
+            bunnyFailed++
+          }
+        }
+      }
+
       await audit(db, userId, 'series.remove', 'series', seriesId, before, {
         ...after,
         entitlements_revoked: revoked,
+        bunny_deleted: bunnyDeleted,
+        bunny_failed: bunnyFailed,
       })
-      return json(req, { ok: true, series: after, entitlements_revoked: revoked })
+      return json(req, {
+        ok: true,
+        series: after,
+        entitlements_revoked: revoked,
+        bunny_deleted: bunnyDeleted,
+        bunny_failed: bunnyFailed,
+      })
     }
 
     default:
