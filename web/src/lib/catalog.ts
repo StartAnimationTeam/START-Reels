@@ -169,6 +169,7 @@ export interface CardSeries {
   episode_credit_cost: number
   is_members_only: boolean
   total_episodes: number
+  view_count: number
 }
 
 export interface SeriesDetail extends CardSeries {
@@ -189,7 +190,7 @@ export interface EpisodeRow {
 }
 
 const SERIES_CARD_COLUMNS =
-  'id, slug, title, cover_url, free_episode_count, episode_credit_cost, is_members_only, total_episodes'
+  'id, slug, title, cover_url, free_episode_count, episode_credit_cost, is_members_only, total_episodes, view_count'
 
 // Public shelves exclude EMPTY series (total_episodes = 0): deleting a
 // show's last episode must not leave a published ghost shell on the home

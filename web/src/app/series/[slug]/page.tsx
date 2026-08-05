@@ -13,7 +13,7 @@ import {
   type SeriesProgressRow,
 } from '@/lib/catalog'
 import { rolesOf } from '@/lib/auth'
-import { comingSoonLabel, episodeLabel, seriesPricingLabel } from '@/lib/labels'
+import { comingSoonLabel, episodeLabel, seriesPricingLabel, viewsLabel } from '@/lib/labels'
 import { createAnonSupabase, createServerSupabase } from '@/lib/supabase-server'
 
 /**
@@ -126,7 +126,8 @@ export default async function SeriesPage({
             <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{series.title}</h1>
 
             <p className="mt-2 text-sm text-ink-muted">
-              {episodeLabel(series.total_episodes)} ·{' '}
+              {episodeLabel(series.total_episodes)}
+              {series.view_count > 0 && <> · ▶ {viewsLabel(series.view_count)}</>} ·{' '}
               {seriesPricingLabel(series.free_episode_count, series.episode_credit_cost)}
               {series.is_members_only && (
                 <span className="ml-2 rounded bg-amber-300/90 px-1.5 py-0.5 text-[11px] font-semibold text-black">

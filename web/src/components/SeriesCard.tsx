@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import { creditLabel, episodeLabel } from '@/lib/labels'
+import { creditLabel, episodeLabel, viewsLabel } from '@/lib/labels'
 import type { CardSeries } from '@/lib/catalog'
 
 /**
@@ -49,6 +49,15 @@ export function SeriesCard({ series }: { series: CardSeries }) {
         {series.total_episodes > 0 && (
           <span className="absolute bottom-2 left-2 rounded bg-black/75 px-1.5 py-0.5 text-[11px] tabular-nums text-white">
             {episodeLabel(series.total_episodes)}
+          </span>
+        )}
+
+        {/* the social-proof badge: plays counted at session start, never
+            page loads */}
+        {series.view_count > 0 && (
+          <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded bg-black/75 px-1.5 py-0.5 text-[11px] tabular-nums text-white">
+            <span aria-hidden>▶</span>
+            {viewsLabel(series.view_count)}
           </span>
         )}
       </div>

@@ -186,6 +186,19 @@ export function comingSoonLabel(iso: string, timeZone?: string): string {
   return `Premieres ${when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...opts })}, ${when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', ...opts })}${zone}`
 }
 
+/** "19.5K", "1M", "842" — the play-count badge, DramaBox-compact. */
+export function viewsLabel(n: number): string {
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000
+    return `${m >= 10 ? Math.round(m) : Math.round(m * 10) / 10}M`
+  }
+  if (n >= 1_000) {
+    const k = n / 1_000
+    return `${k >= 10 ? Math.round(k) : Math.round(k * 10) / 10}K`
+  }
+  return String(n)
+}
+
 /** "2h 14m", "8m 03s", "44s" — never a bare seconds count. */
 export function durationLabel(totalSeconds: number | null | undefined): string {
   if (!totalSeconds || totalSeconds < 0) return '—'

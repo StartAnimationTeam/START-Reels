@@ -199,6 +199,20 @@ try {
     `)
     h.check('…and leaves no partial entitlement', noEnt[0].n === 0, `${noEnt[0].n} row(s)`)
 
+    // View counters (0025): one session start = +1 on the episode AND its
+    // series — the same grain as the concurrency cap, behind the same
+    // entitlement check, so page loads can never inflate it.
+    const sess = await sql(`
+      select public.start_watch_session('${U.viewer}', '${e3}', '${paid[0].r.entitlement_id}', 'test', null) as r
+    `)
+    h.check('a playback session starts against the paid unlock', Boolean(sess[0].r.session_id), JSON.stringify(sess[0].r))
+    const counters = await sql(`
+      select (select view_count from public.videos where id = '${e3}') as ep,
+             (select view_count from public.series where id = '${sid}') as se
+    `)
+    h.check('…and counts one view on the episode', Number(counters[0].ep) === 1, `got ${counters[0].ep}`)
+    h.check('…and one on the series', Number(counters[0].se) === 1, `got ${counters[0].se}`)
+
     // A removed series takes its episodes off sale, row status notwithstanding.
     await sql(`update public.series set status = 'removed' where id = '${sid}'`)
     const offSale = await sqlExpectError(`select public.unlock_video('${U.viewer}_poor', '${e1}')`)
@@ -263,12 +277,17 @@ try {
   // ── §structure: series_progress ───────────────────────────────────────
   h.section('series_progress view')
   {
+    // §pricing's session start already wrote a history row for ep-3 — upsert.
     await sql(`
       insert into public.watch_history
         (user_id, video_id, last_position_seconds, total_seconds_watched, watch_count, completed)
       values
         ('${U.viewer}', '${e1}', 61, 61, 1, true),
         ('${U.viewer}', (select id from public.videos where slug = 'series-test-ep-3'), 17, 17, 1, false)
+      on conflict (user_id, video_id) do update
+        set last_position_seconds = excluded.last_position_seconds,
+            total_seconds_watched = excluded.total_seconds_watched,
+            completed = excluded.completed
     `)
 
     const rows = await sql(`

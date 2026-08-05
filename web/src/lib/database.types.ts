@@ -102,6 +102,7 @@ export interface Database {
           episode_credit_cost: number
           is_members_only: boolean
           total_episodes: number
+          view_count: number
           is_featured: boolean
           featured_rank: number | null
           published_at: string | null
@@ -455,6 +456,7 @@ export interface Database {
           episode_credit_cost: number
           is_members_only: boolean
           total_episodes: number
+          view_count: number
           trend_score: number
         }
         Relationships: []
@@ -492,6 +494,7 @@ export interface Database {
           episode_credit_cost: number
           is_members_only: boolean
           total_episodes: number
+          view_count: number
         }[]
       }
     }
