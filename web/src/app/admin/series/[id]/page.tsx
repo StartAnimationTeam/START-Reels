@@ -10,7 +10,7 @@ import { SeriesEditor } from './SeriesEditor'
 import { hasRole } from '@/lib/auth'
 import { activeCategories, allTags } from '@/lib/catalog'
 import { createServerSupabase } from '@/lib/supabase-server'
-import { SERIES_STATUS_LABELS } from '@/lib/labels'
+import { SERIES_STATUS_LABELS, viewsLabel } from '@/lib/labels'
 
 /**
  * One series, everything about it: metadata editor, cover, lifecycle
@@ -40,7 +40,7 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
   const { data: series } = await supabase
     .from('series')
     .select(
-      'id, slug, title, synopsis, cover_url, status, free_episode_count, episode_credit_cost, is_members_only, total_episodes, is_featured, featured_rank, published_at, scheduled_publish_at',
+      'id, slug, title, synopsis, cover_url, status, free_episode_count, episode_credit_cost, is_members_only, total_episodes, view_count, is_featured, featured_rank, published_at, scheduled_publish_at',
     )
     .eq('id', id)
     .is('deleted_at', null)
@@ -55,7 +55,7 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
       supabase.from('series_tags').select('tag_id').eq('series_id', id),
       supabase
         .from('videos')
-        .select('id, title, episode_number, status, duration_seconds, created_at')
+        .select('id, title, episode_number, status, duration_seconds, view_count, created_at')
         .eq('series_id', id)
         .is('deleted_at', null)
         .order('episode_number', { ascending: true }),
@@ -97,6 +97,9 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
             >
               {SERIES_STATUS_LABELS[series.status] ?? series.status}
             </span>
+            {series.view_count > 0 && (
+              <span className="text-xs tabular-nums text-ink-muted">▶ {viewsLabel(series.view_count)} views</span>
+            )}
             {series.status === 'published' && (
               <Link
                 href={`/series/${series.slug}`}

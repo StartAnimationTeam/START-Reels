@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 import { useAdminApi } from '@/lib/admin'
-import { durationLabel, episodeLabel, errorLabel, VIDEO_STATUS_LABELS } from '@/lib/labels'
+import { durationLabel, episodeLabel, errorLabel, VIDEO_STATUS_LABELS, viewsLabel } from '@/lib/labels'
 
 /**
  * The episode roster with teeth. Every action rides the existing
@@ -28,6 +28,7 @@ export interface EpisodeRowData {
   episode_number: number | null
   status: string
   duration_seconds: number | null
+  view_count: number
 }
 
 export function EpisodeTable({
@@ -81,6 +82,7 @@ export function EpisodeTable({
             <th className="px-4 py-2.5 font-medium">Title</th>
             <th className="px-4 py-2.5 font-medium">Status</th>
             <th className="px-4 py-2.5 font-medium">Length</th>
+            <th className="px-4 py-2.5 font-medium">Views</th>
             <th className="px-4 py-2.5 font-medium">Actions</th>
           </tr>
         </thead>
@@ -134,6 +136,11 @@ export function EpisodeTable({
 
                 <td className="px-4 py-2.5 tabular-nums text-ink-secondary">
                   {durationLabel(ep.duration_seconds)}
+                </td>
+
+                {/* per-episode views = the drop-off curve, right in the roster */}
+                <td className="px-4 py-2.5 tabular-nums text-ink-secondary">
+                  {ep.view_count > 0 ? viewsLabel(ep.view_count) : '—'}
                 </td>
 
                 <td className="px-4 py-2.5">
