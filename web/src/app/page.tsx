@@ -83,7 +83,7 @@ function SeriesHero({ series }: { series: CardSeries & { synopsis: string | null
           : { background: 'var(--surface-brand)' }
       }
     >
-      <div className="flex min-h-[300px] flex-col justify-end p-6 sm:min-h-[380px] sm:p-10">
+      <div className="flex min-h-[240px] flex-col justify-end p-5 sm:min-h-[380px] sm:p-10">
         <p className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--accent-pink)' }}>
           Featured
         </p>

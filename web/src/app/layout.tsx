@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { ClerkProvider } from '@clerk/nextjs'
 import { dark } from '@clerk/themes'
 import { Geist, Geist_Mono } from 'next/font/google'
@@ -16,6 +16,16 @@ export const metadata: Metadata = {
     template: '%s · START Reels',
   },
   description: 'Bingeable vertical short dramas and mini-series from START LANDS.',
+}
+
+// viewportFit: 'cover' is what makes env(safe-area-inset-*) non-zero on
+// notched phones — without it the bottom tab bar sits ON the iOS home
+// indicator. themeColor tints the browser chrome to the app background.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#0a0a0d',
 }
 
 export default function RootLayout({
@@ -51,9 +61,12 @@ export default function RootLayout({
       >
         <body className="min-h-full flex flex-col bg-background text-ink">
           <Nav />
-          {/* pb clears the fixed bottom tab bar; BottomNav hides itself on
-              routes that don't show it, where the padding is harmless. */}
-          <main className="flex-1 pb-14">{children}</main>
+          {/* pb clears the fixed bottom tab bar PLUS the device's safe area;
+              BottomNav hides itself on routes that don't show it, where the
+              padding is harmless. */}
+          <main className="flex-1" style={{ paddingBottom: 'calc(3.5rem + var(--safe-bottom))' }}>
+            {children}
+          </main>
           <BottomNav />
         </body>
       </html>

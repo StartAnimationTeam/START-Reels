@@ -1,4 +1,7 @@
+'use client'
+
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 // Clerk v7 removed <SignedIn>/<SignedOut> in favour of <Show when="…">.
 import { Show, SignInButton, UserButton } from '@clerk/nextjs'
 
@@ -8,8 +11,14 @@ import { SearchLauncher } from './SearchLauncher'
 /**
  * The slim top bar. Primary navigation lives in the bottom tab bar since the
  * pivot — this keeps only identity (logo), search, and the account corner.
+ *
+ * Hidden on /watch: a vertical player is an IMMERSIVE surface, and 56px of
+ * chrome on a phone screen is 56px of drama lost — the player carries its
+ * own back affordance instead.
  */
 export function Nav() {
+  const pathname = usePathname() ?? '/'
+  if (pathname.startsWith('/watch')) return null
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-background/85 backdrop-blur-md">
       <nav className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4 sm:px-6">

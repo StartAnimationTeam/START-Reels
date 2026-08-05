@@ -112,7 +112,7 @@ export function FeedPlayer({ slides, signedIn }: { slides: FeedSlide[]; signedIn
 
   if (!slides.length) {
     return (
-      <div className="flex h-[calc(100dvh-7rem)] items-center justify-center px-6 text-center">
+      <div className="flex h-[calc(100dvh-7rem-var(--safe-bottom))] items-center justify-center px-6 text-center">
         <p className="text-sm text-ink-muted">
           The feed fills up as shows premiere — check back soon.
         </p>
@@ -123,7 +123,7 @@ export function FeedPlayer({ slides, signedIn }: { slides: FeedSlide[]; signedIn
   return (
     <div
       ref={containerRef}
-      className="no-scrollbar h-[calc(100dvh-7rem)] snap-y snap-mandatory overflow-y-auto bg-black"
+      className="no-scrollbar h-[calc(100dvh-7rem-var(--safe-bottom))] snap-y snap-mandatory overflow-y-auto bg-black"
     >
       {slides.map((slide, index) => {
         const state: SlideState = (slide.videoId && states[slide.videoId]) || { kind: 'idle' }

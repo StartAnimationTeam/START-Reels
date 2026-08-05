@@ -242,9 +242,12 @@ export function WatchExperience({
   )
 
   return (
+    // Full-bleed: both chrome bars hide on /watch, so the swiper owns the
+    // whole viewport — the DramaBox stage. max-w-md keeps desktop honest
+    // (a 9:16 video across a 27" monitor is a wall of blur).
     <div
       ref={containerRef}
-      className="no-scrollbar mx-auto h-[calc(100dvh-3.5rem)] max-w-md snap-y snap-mandatory overflow-y-auto bg-black"
+      className="no-scrollbar mx-auto h-dvh max-w-md snap-y snap-mandatory overflow-y-auto bg-black"
     >
       {slides.map((slide, index) => {
         const state: SlideState = states[slide.id] ?? { kind: 'idle' }
@@ -364,10 +367,21 @@ export function WatchExperience({
               </div>
             )}
 
-            {/* series identity overlay */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent p-4">
+            {/* series identity overlay — with the back affordance the hidden
+                top nav no longer provides (safe-area padded for the notch) */}
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent p-4"
+              style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
+            >
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+                <Link
+                  href={`/series/${seriesSlug}`}
+                  aria-label="Back to the series"
+                  className="pointer-events-auto -ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/40 text-lg text-white backdrop-blur"
+                >
+                  ←
+                </Link>
+                <div className="min-w-0 flex-1">
                   <Link
                     href={`/series/${seriesSlug}`}
                     className="pointer-events-auto inline-flex max-w-full items-center gap-2 text-sm font-medium text-white"

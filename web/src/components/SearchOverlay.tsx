@@ -196,7 +196,10 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
       </div>
 
       {/* ── results ──────────────────────────────────────────────────────── */}
-      <div className="mx-auto mt-4 w-full max-w-7xl flex-1 overflow-y-auto px-4 pb-10 sm:px-6">
+      <div
+        className="mx-auto mt-4 w-full max-w-7xl flex-1 overflow-y-auto px-4 sm:px-6"
+        style={{ paddingBottom: 'calc(2.5rem + var(--safe-bottom))' }}
+      >
         {results === null || busy ? (
           <p className="text-sm text-ink-muted">Searching…</p>
         ) : results.length === 0 ? (
