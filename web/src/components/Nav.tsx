@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Show, SignInButton, UserButton } from '@clerk/nextjs'
 
 import { CreditBadge } from './CreditBadge'
+import { SearchLauncher } from './SearchLauncher'
 
 /**
  * The slim top bar. Primary navigation lives in the bottom tab bar since the
@@ -23,13 +24,7 @@ export function Nav() {
         </Link>
 
         <div className="ml-auto flex items-center gap-3">
-          <Link
-            href="/search"
-            aria-label="Search"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-ink-secondary transition-colors hover:text-ink"
-          >
-            ⌕
-          </Link>
+          <SearchLauncher variant="icon" />
 
           <Show when="signed-in">
             <CreditBadge />

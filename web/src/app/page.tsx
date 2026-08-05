@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { auth } from '@clerk/nextjs/server'
 
 import { HomeTabs, homeTab } from '@/components/HomeTabs'
+import { SearchLauncher } from '@/components/SearchLauncher'
 import { SeriesCard } from '@/components/SeriesCard'
 import { SeriesRail } from '@/components/SeriesRail'
 import {
@@ -31,9 +32,9 @@ import { createAnonSupabase, createServerSupabase } from '@/lib/supabase-server'
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>
+  searchParams: Promise<{ tab?: string; sub?: string }>
 }) {
-  const { tab: rawTab } = await searchParams
+  const { tab: rawTab, sub } = await searchParams
   const tab = homeTab(rawTab)
   const anon = createAnonSupabase()
 
@@ -42,16 +43,9 @@ export default async function HomePage({
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-24 pt-4 sm:px-6">
-      {/* The main-screen search entry: looks like a field, acts like a link.
-          Tapping lands on /search with the real input focused — one tap,
-          keyboard up, no dead weight of a live search on the home render. */}
-      <Link
-        href="/search"
-        className="mb-4 flex items-center gap-2 rounded-lg border border-line-strong bg-surface-muted px-4 py-2.5 text-sm text-ink-faint transition-colors hover:border-brand hover:text-ink-muted"
-      >
-        <span aria-hidden>⌕</span>
-        Search dramas — “Secret Baby”, “Revenge”…
-      </Link>
+      {/* The main-screen search entry — opens the overlay in place, no
+          navigation (owner call: search is a popup, not a page). */}
+      <SearchLauncher variant="pill" />
 
       {hero && tab === 'popular' && <SeriesHero series={hero} />}
 
@@ -61,7 +55,7 @@ export default async function HomePage({
 
       <div className="mt-6">
         {tab === 'popular' && <PopularTab anon={anon} featuredRest={featured.slice(1)} />}
-        {tab === 'new' && <NewTab anon={anon} />}
+        {tab === 'new' && <NewTab anon={anon} sub={sub === 'soon' ? 'soon' : 'live'} />}
         {tab === 'rankings' && <RankingsTab anon={anon} />}
         {tab === 'categories' && <CategoriesTab anon={anon} />}
       </div>
@@ -169,38 +163,53 @@ async function PopularTab({ anon, featuredRest }: { anon: Anon; featuredRest: Ca
   )
 }
 
-async function NewTab({ anon }: { anon: Anon }) {
+async function NewTab({ anon, sub }: { anon: Anon; sub: 'live' | 'soon' }) {
   const [recent, upcoming] = await Promise.all([newSeries(anon, 24), comingSoonSeries(anon)])
 
-  if (!recent.length && !upcoming.length) {
-    return <p className="text-sm text-ink-muted">Nothing published yet — check back soon.</p>
-  }
+  // The DramaBox sub-toggle: Live Now | Coming Soon, URL-borne like the
+  // tabs themselves (?tab=new&sub=soon) — linkable, back-button-sane.
+  const pill = (active: boolean) =>
+    `rounded-full px-4 py-1.5 text-sm transition-colors ${
+      active
+        ? 'font-medium text-white'
+        : 'border border-line text-ink-secondary hover:border-line-strong hover:text-ink'
+    }`
+  const pillStyle = (active: boolean) => (active ? { background: 'var(--brand-gradient)' } : undefined)
 
   return (
     <>
-      {upcoming.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-lg font-semibold tracking-tight">Coming Soon</h2>
-          <div className="no-scrollbar -mx-4 mt-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
-            {upcoming.map((s) => (
-              <div key={s.id} className="w-32 shrink-0 snap-start sm:w-40">
-                <SeriesCard series={s} />
-                <p className="mt-1 text-[11px]" style={{ color: 'var(--accent-pink)' }}>
-                  {comingSoonLabel(s.scheduled_publish_at)}
-                </p>
-              </div>
+      <div className="mb-5 flex items-center gap-2">
+        <Link href="/?tab=new" className={pill(sub === 'live')} style={pillStyle(sub === 'live')}>
+          Live Now
+        </Link>
+        <Link href="/?tab=new&sub=soon" className={pill(sub === 'soon')} style={pillStyle(sub === 'soon')}>
+          Coming Soon{upcoming.length > 0 ? ` (${upcoming.length})` : ''}
+        </Link>
+      </div>
+
+      {sub === 'live' ? (
+        recent.length === 0 ? (
+          <p className="text-sm text-ink-muted">Nothing published yet — check back soon.</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
+            {recent.map((s) => (
+              <SeriesCard key={s.id} series={s} />
             ))}
           </div>
-        </section>
-      )}
-
-      {upcoming.length > 0 && <h2 className="mb-3 text-lg font-semibold tracking-tight">Live Now</h2>}
-      {recent.length === 0 ? (
-        <p className="text-sm text-ink-muted">Nothing published yet — check back soon.</p>
+        )
+      ) : upcoming.length === 0 ? (
+        <p className="text-sm text-ink-muted">
+          No premieres on the calendar yet — schedule one and it appears here with its date.
+        </p>
       ) : (
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
-          {recent.map((s) => (
-            <SeriesCard key={s.id} series={s} />
+          {upcoming.map((s) => (
+            <div key={s.id}>
+              <SeriesCard series={s} />
+              <p className="mt-1 text-[11px]" style={{ color: 'var(--accent-pink)' }}>
+                {comingSoonLabel(s.scheduled_publish_at)}
+              </p>
+            </div>
           ))}
         </div>
       )}
