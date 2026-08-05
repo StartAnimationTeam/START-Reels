@@ -189,6 +189,44 @@ export function WatchExperience({
     next?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }, [active])
 
+  // ── idle chrome: the UI gets out of the drama's way ──────────────────
+  // 3s of stillness WHILE PLAYING fades every overlay; any touch or mouse
+  // move brings it all back. Paywall/error/loading slides never hide their
+  // chrome — invisible buttons are unusable buttons.
+  const [chromeVisible, setChromeVisible] = useState(true)
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const playingRef = useRef(false)
+
+  const poke = useCallback(() => {
+    setChromeVisible(true)
+    if (idleTimer.current) clearTimeout(idleTimer.current)
+    idleTimer.current = setTimeout(() => {
+      if (playingRef.current) setChromeVisible(false)
+    }, 3000)
+  }, [])
+
+  const activeSlideForChrome = slides[active]
+  const activePlaying = Boolean(
+    activeSlideForChrome &&
+      isOpen(activeSlideForChrome) &&
+      states[activeSlideForChrome.id]?.kind === 'ready',
+  )
+  useEffect(() => {
+    playingRef.current = activePlaying
+    if (!activePlaying) setChromeVisible(true)
+    else poke() // playback just started — arm the timer
+  }, [activePlaying, poke])
+
+  useEffect(() => {
+    poke() // every slide change resets the clock
+    return () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current)
+    }
+  }, [active, poke])
+
+  const chromeFade = `transition-opacity duration-300 ${chromeVisible ? 'opacity-100' : 'opacity-0'}`
+  const interactive = chromeVisible ? 'pointer-events-auto' : 'pointer-events-none'
+
   // ── the action rail: like / save / share ────────────────────────────
   // Likes and saves ride the two client-writable RLS tables
   // (episode_likes, series_follows) — optimistic flips, rolled back if the
@@ -247,6 +285,8 @@ export function WatchExperience({
     // (a 9:16 video across a 27" monitor is a wall of blur).
     <div
       ref={containerRef}
+      onPointerDown={poke}
+      onPointerMove={poke}
       className="no-scrollbar mx-auto h-dvh max-w-md snap-y snap-mandatory overflow-y-auto bg-black"
     >
       {slides.map((slide, index) => {
@@ -370,21 +410,21 @@ export function WatchExperience({
             {/* series identity overlay — with the back affordance the hidden
                 top nav no longer provides (safe-area padded for the notch) */}
             <div
-              className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent p-4"
+              className={`pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent p-4 ${chromeFade}`}
               style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
             >
               <div className="flex items-start justify-between gap-3">
                 <Link
                   href={`/series/${seriesSlug}`}
                   aria-label="Back to the series"
-                  className="pointer-events-auto -ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/40 text-lg text-white backdrop-blur"
+                  className={`${interactive} -ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/40 text-lg text-white backdrop-blur`}
                 >
                   ←
                 </Link>
                 <div className="min-w-0 flex-1">
                   <Link
                     href={`/series/${seriesSlug}`}
-                    className="pointer-events-auto inline-flex max-w-full items-center gap-2 text-sm font-medium text-white"
+                    className={`${interactive} inline-flex max-w-full items-center gap-2 text-sm font-medium text-white`}
                   >
                     <span className="truncate">{seriesTitle}</span>
                     <span aria-hidden>›</span>
@@ -395,7 +435,7 @@ export function WatchExperience({
                 </div>
                 <Link
                   href={`/series/${seriesSlug}`}
-                  className="pointer-events-auto shrink-0 rounded-full border border-white/25 bg-black/30 px-2.5 py-1 text-[11px] text-white/85"
+                  className={`${interactive} shrink-0 rounded-full border border-white/25 bg-black/30 px-2.5 py-1 text-[11px] text-white/85`}
                 >
                   All episodes
                 </Link>
@@ -403,7 +443,7 @@ export function WatchExperience({
             </div>
 
             {/* ── the action rail: like / save / share ─────────────────── */}
-            <div className="absolute bottom-24 right-3 z-10 flex flex-col items-center gap-4">
+            <div className={`absolute bottom-24 right-3 z-10 flex flex-col items-center gap-4 ${chromeFade} ${chromeVisible ? '' : 'pointer-events-none'}`}>
               {signedIn ? (
                 <button
                   onClick={() => void toggleLike(slide)}
@@ -472,7 +512,7 @@ export function WatchExperience({
 
             {/* swipe affordance — only where a next slide exists */}
             {isActive && index < slides.length - 1 && (
-              <p className="pointer-events-none absolute inset-x-0 bottom-2 text-center text-[11px] text-white/50">
+              <p className={`pointer-events-none absolute inset-x-0 bottom-2 text-center text-[11px] text-white/50 ${chromeFade}`}>
                 ↑ swipe up for {episodeLabel(slides[index + 1].episodeNumber)}
               </p>
             )}
