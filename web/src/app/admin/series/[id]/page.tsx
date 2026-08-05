@@ -40,7 +40,7 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
   const { data: series } = await supabase
     .from('series')
     .select(
-      'id, slug, title, synopsis, cover_url, status, free_episode_count, episode_credit_cost, is_members_only, total_episodes, view_count, is_featured, featured_rank, published_at, scheduled_publish_at',
+      'id, slug, title, synopsis, cover_url, status, free_episode_count, episode_credit_cost, is_members_only, total_episodes, view_count, like_count, is_featured, featured_rank, published_at, scheduled_publish_at',
     )
     .eq('id', id)
     .is('deleted_at', null)
@@ -55,7 +55,7 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
       supabase.from('series_tags').select('tag_id').eq('series_id', id),
       supabase
         .from('videos')
-        .select('id, title, episode_number, status, duration_seconds, view_count, created_at')
+        .select('id, title, episode_number, status, duration_seconds, view_count, like_count, created_at')
         .eq('series_id', id)
         .is('deleted_at', null)
         .order('episode_number', { ascending: true }),
@@ -99,6 +99,9 @@ export default async function AdminSeriesDetailPage({ params }: Props) {
             </span>
             {series.view_count > 0 && (
               <span className="text-xs tabular-nums text-ink-muted">▶ {viewsLabel(series.view_count)} views</span>
+            )}
+            {series.like_count > 0 && (
+              <span className="text-xs tabular-nums text-ink-muted">♥ {viewsLabel(series.like_count)} likes</span>
             )}
             {series.status === 'published' && (
               <Link

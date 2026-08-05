@@ -49,7 +49,7 @@ export default async function WatchPage({ params }: Props) {
       .maybeSingle(),
     supabase
       .from('videos')
-      .select('id, title, episode_number, thumbnail_url')
+      .select('id, title, episode_number, thumbnail_url, like_count')
       .eq('series_id', video.series_id)
       .eq('status', 'published')
       .is('deleted_at', null)
@@ -79,17 +79,24 @@ export default async function WatchPage({ params }: Props) {
   if (startIndex === -1) notFound()
 
   let unlockedIds = new Set<string>()
+  let likedIds = new Set<string>()
+  let followed = false
   let resumeAt = 0
   let balance = 0
   if (userId && episodes.length) {
     const now = new Date().toISOString()
-    const [entRes, historyRes, balanceRes] = await Promise.all([
+    const [entRes, likesRes, followRes, historyRes, balanceRes] = await Promise.all([
       supabase
         .from('video_entitlements')
         .select('video_id')
         .in('video_id', episodes.map((e) => e.id))
         .gt('expires_at', now)
         .is('revoked_at', null),
+      supabase
+        .from('episode_likes')
+        .select('video_id')
+        .in('video_id', episodes.map((e) => e.id)),
+      supabase.from('series_follows').select('series_id').eq('series_id', series.id).limit(1),
       supabase
         .from('watch_history')
         .select('last_position_seconds, completed')
@@ -99,6 +106,8 @@ export default async function WatchPage({ params }: Props) {
       supabase.from('credit_balances').select('available_balance').maybeSingle(),
     ])
     unlockedIds = new Set((entRes.data ?? []).map((e) => e.video_id))
+    likedIds = new Set((likesRes.data ?? []).map((l) => l.video_id))
+    followed = Boolean(followRes.data?.length)
     // Resume mid-episode; a finished episode restarts from the top.
     resumeAt = historyRes.data?.completed ? 0 : Number(historyRes.data?.last_position_seconds ?? 0)
     balance = Number(balanceRes.data?.available_balance ?? 0)
@@ -109,6 +118,8 @@ export default async function WatchPage({ params }: Props) {
     episodeNumber: e.episode_number ?? 0,
     thumbnailUrl: e.thumbnail_url,
     open: (e.episode_number ?? 0) <= series.free_episode_count || unlockedIds.has(e.id),
+    likeCount: Number(e.like_count ?? 0),
+    liked: likedIds.has(e.id),
   }))
 
   return (
@@ -120,6 +131,9 @@ export default async function WatchPage({ params }: Props) {
       totalEpisodes={series.total_episodes}
       lockedEpisodeCost={series.episode_credit_cost}
       signedIn={Boolean(userId)}
+      userId={userId}
+      seriesId={series.id}
+      initiallyFollowed={followed}
       resumeAt={resumeAt}
       initialBalance={balance}
     />

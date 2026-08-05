@@ -81,6 +81,7 @@ export interface Database {
           deleted_at: string | null
           series_id: string | null
           episode_number: number | null
+          like_count: number
         }
         Insert: never
         Update: never
@@ -103,6 +104,7 @@ export interface Database {
           is_members_only: boolean
           total_episodes: number
           view_count: number
+          like_count: number
           is_featured: boolean
           featured_rank: number | null
           published_at: string | null
@@ -138,6 +140,14 @@ export interface Database {
         // Client-writable, favorites-shaped: RLS WITH CHECK pins user_id to
         // the caller; the column grant excludes created_at.
         Insert: { user_id: string; series_id: string }
+        Update: never
+        Relationships: []
+      }
+      episode_likes: {
+        Row: { user_id: string; video_id: string; created_at: string }
+        // Client-writable, favorites-shaped (0026); counts live on
+        // videos/series.like_count via trigger.
+        Insert: { user_id: string; video_id: string }
         Update: never
         Relationships: []
       }

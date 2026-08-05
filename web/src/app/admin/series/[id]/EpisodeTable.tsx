@@ -29,6 +29,7 @@ export interface EpisodeRowData {
   status: string
   duration_seconds: number | null
   view_count: number
+  like_count: number
 }
 
 export function EpisodeTable({
@@ -83,6 +84,7 @@ export function EpisodeTable({
             <th className="px-4 py-2.5 font-medium">Status</th>
             <th className="px-4 py-2.5 font-medium">Length</th>
             <th className="px-4 py-2.5 font-medium">Views</th>
+            <th className="px-4 py-2.5 font-medium">Likes</th>
             <th className="px-4 py-2.5 font-medium">Actions</th>
           </tr>
         </thead>
@@ -141,6 +143,9 @@ export function EpisodeTable({
                 {/* per-episode views = the drop-off curve, right in the roster */}
                 <td className="px-4 py-2.5 tabular-nums text-ink-secondary">
                   {ep.view_count > 0 ? viewsLabel(ep.view_count) : '—'}
+                </td>
+                <td className="px-4 py-2.5 tabular-nums text-ink-secondary">
+                  {ep.like_count > 0 ? `♥ ${viewsLabel(ep.like_count)}` : '—'}
                 </td>
 
                 <td className="px-4 py-2.5">

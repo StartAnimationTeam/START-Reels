@@ -22,7 +22,7 @@ export default async function AdminSeriesPage() {
     supabase
       .from('series')
       .select(
-        'id, slug, title, status, cover_url, free_episode_count, episode_credit_cost, is_members_only, total_episodes, view_count, is_featured, featured_rank, published_at, scheduled_publish_at, created_at',
+        'id, slug, title, status, cover_url, free_episode_count, episode_credit_cost, is_members_only, total_episodes, view_count, like_count, is_featured, featured_rank, published_at, scheduled_publish_at, created_at',
       )
       .is('deleted_at', null)
       // The 0018 backfill carried 'removed' over WITHOUT deleted_at; either
@@ -55,6 +55,7 @@ export default async function AdminSeriesPage() {
                 <th className="px-4 py-2.5 font-medium">Status</th>
                 <th className="px-4 py-2.5 font-medium">Episodes</th>
                 <th className="px-4 py-2.5 font-medium">Views</th>
+                <th className="px-4 py-2.5 font-medium">Likes</th>
                 <th className="px-4 py-2.5 font-medium">Pricing</th>
                 <th className="px-4 py-2.5 font-medium">Members</th>
                 <th className="px-4 py-2.5 font-medium">Featured</th>
@@ -98,6 +99,9 @@ export default async function AdminSeriesPage() {
                   </td>
                   <td className="px-4 py-2.5 tabular-nums text-ink-secondary">
                     {s.view_count > 0 ? `▶ ${viewsLabel(s.view_count)}` : '—'}
+                  </td>
+                  <td className="px-4 py-2.5 tabular-nums text-ink-secondary">
+                    {s.like_count > 0 ? `♥ ${viewsLabel(s.like_count)}` : '—'}
                   </td>
                   <td className="px-4 py-2.5 text-ink-secondary">
                     {seriesPricingLabel(s.free_episode_count, s.episode_credit_cost)}

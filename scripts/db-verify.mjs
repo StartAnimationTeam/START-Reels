@@ -68,7 +68,7 @@ const EXPECTED = [
   // Phase 4
   'daily_reward_claims',
   // Series pivot (0017)
-  'series', 'series_categories', 'series_tags', 'series_follows',
+  'series', 'series_categories', 'series_tags', 'series_follows', 'episode_likes',
 ]
 
 const tables = await sql(`
@@ -172,7 +172,7 @@ check(
 // silently invisible to clients — embedded selects omit it, explicit selects
 // error. Forgetting the grant is the failure mode; assert it positively.
 console.log('\nseries_id / episode_number are client-selectable:')
-for (const col of ['series_id', 'episode_number']) {
+for (const col of ['series_id', 'episode_number', 'like_count']) {
   const grant = await sql(`
     select array_to_string(array(
       select grantee from information_schema.column_privileges
