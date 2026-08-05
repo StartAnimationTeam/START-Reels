@@ -29,7 +29,7 @@ export default async function FeedPage() {
   shows = shows.filter((s) => s.total_episodes > 0)
 
   if (!shows.length) {
-    return <FeedPlayer slides={[]} signedIn={Boolean(userId)} />
+    return <FeedPlayer slides={[]} signedIn={Boolean(userId)} userId={userId} />
   }
 
   const showIds = shows.map((s) => s.id)
@@ -39,7 +39,7 @@ export default async function FeedPage() {
   const [{ data: firstEpisodes }, { data: tagRows }] = await Promise.all([
     supabase
       .from('videos')
-      .select('id, series_id, thumbnail_url, episode_number')
+      .select('id, series_id, thumbnail_url, episode_number, like_count')
       .in('series_id', showIds)
       .eq('episode_number', 1)
       .eq('status', 'published')
@@ -60,14 +60,23 @@ export default async function FeedPage() {
   }
 
   let unlockedIds = new Set<string>()
+  let likedIds = new Set<string>()
+  let followedIds = new Set<string>()
   if (userId && ep1BySeries.size) {
-    const { data: ents } = await supabase
-      .from('video_entitlements')
-      .select('video_id')
-      .in('video_id', [...ep1BySeries.values()].map((e) => e.id))
-      .gt('expires_at', new Date().toISOString())
-      .is('revoked_at', null)
+    const ep1Ids = [...ep1BySeries.values()].map((e) => e.id)
+    const [{ data: ents }, { data: myLikes }, { data: myFollows }] = await Promise.all([
+      supabase
+        .from('video_entitlements')
+        .select('video_id')
+        .in('video_id', ep1Ids)
+        .gt('expires_at', new Date().toISOString())
+        .is('revoked_at', null),
+      supabase.from('episode_likes').select('video_id').in('video_id', ep1Ids),
+      supabase.from('series_follows').select('series_id').in('series_id', showIds),
+    ])
     unlockedIds = new Set((ents ?? []).map((e) => e.video_id))
+    likedIds = new Set((myLikes ?? []).map((l) => l.video_id))
+    followedIds = new Set((myFollows ?? []).map((f) => f.series_id))
   }
 
   // Fetch synopses in one read (CardSeries doesn't carry them).
@@ -91,10 +100,13 @@ export default async function FeedPage() {
         thumbnailUrl: ep1?.thumbnail_url ?? null,
         coverUrl: show.cover_url,
         open: Boolean(ep1) && (show.free_episode_count >= 1 || unlockedIds.has(ep1!.id)),
+        likeCount: Number(ep1?.like_count ?? 0),
+        liked: ep1 ? likedIds.has(ep1.id) : false,
+        followed: followedIds.has(show.id),
       }
     })
     // A series with no playable EP.1 can't be a slide.
     .filter((slide) => slide.videoId !== null || slide.coverUrl !== null)
 
-  return <FeedPlayer slides={slides} signedIn={Boolean(userId)} />
+  return <FeedPlayer slides={slides} signedIn={Boolean(userId)} userId={userId} />
 }

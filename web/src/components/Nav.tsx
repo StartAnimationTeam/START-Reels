@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation'
 import { Show, SignInButton, UserButton } from '@clerk/nextjs'
 
 import { CreditBadge } from './CreditBadge'
-import { SearchLauncher } from './SearchLauncher'
 
 /**
  * The slim top bar. Primary navigation lives in the bottom tab bar since the
@@ -32,8 +31,9 @@ export function Nav() {
           <span className="brand-gradient-text">Reels</span>
         </Link>
 
+        {/* Search lives in the home screen's pill (owner call) — the top bar
+            keeps only identity and account. */}
         <div className="ml-auto flex items-center gap-3">
-          <SearchLauncher variant="icon" />
 
           <Show when="signed-in">
             <CreditBadge />

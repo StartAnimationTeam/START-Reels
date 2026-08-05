@@ -5,7 +5,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { StreamPlayer } from '@/components/player/StreamPlayer'
 import { ApiError, useApi, type PlaybackResult } from '@/lib/api'
-import { episodeLabel, errorLabel } from '@/lib/labels'
+import { episodeLabel, errorLabel, viewsLabel } from '@/lib/labels'
+import { useSupabase } from '@/lib/supabase-browser'
 
 /**
  * The For You feed — full-height snap slides, each a series' EP.1.
@@ -35,6 +36,9 @@ export interface FeedSlide {
   thumbnailUrl: string | null
   coverUrl: string | null
   open: boolean // EP.1 inside the free window or already entitled
+  likeCount: number
+  liked: boolean
+  followed: boolean
 }
 
 type SlideState =
@@ -43,12 +47,78 @@ type SlideState =
   | { kind: 'ready'; playback: PlaybackResult }
   | { kind: 'error'; code: string }
 
-export function FeedPlayer({ slides, signedIn }: { slides: FeedSlide[]; signedIn: boolean }) {
+export function FeedPlayer({
+  slides,
+  signedIn,
+  userId,
+}: {
+  slides: FeedSlide[]
+  signedIn: boolean
+  userId: string | null
+}) {
   const api = useApi()
+  const supabase = useSupabase()
   const containerRef = useRef<HTMLDivElement>(null)
   const [active, setActive] = useState(0)
   const [muted, setMuted] = useState(true)
   const [states, setStates] = useState<Record<string, SlideState>>({})
+
+  // ── the action rail: like / save / share (same contract as the watch
+  // surface — optimistic flips on the two client-writable tables, the DB
+  // wins on error) ─────────────────────────────────────────────────────
+  const [likes, setLikes] = useState<Record<string, { liked: boolean; count: number }>>(() =>
+    Object.fromEntries(
+      slides.filter((s) => s.videoId).map((s) => [s.videoId!, { liked: s.liked, count: s.likeCount }]),
+    ),
+  )
+  const [savedSeries, setSavedSeries] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(slides.map((s) => [s.seriesId, s.followed])),
+  )
+  const [shareNote, setShareNote] = useState(false)
+
+  const toggleLike = useCallback(
+    async (slide: FeedSlide) => {
+      if (!supabase || !userId || !slide.videoId) return
+      const cur = likes[slide.videoId] ?? { liked: false, count: 0 }
+      const flipped = { liked: !cur.liked, count: Math.max(0, cur.count + (cur.liked ? -1 : 1)) }
+      setLikes((l) => ({ ...l, [slide.videoId!]: flipped }))
+      const res = flipped.liked
+        ? await supabase.from('episode_likes').insert({ user_id: userId, video_id: slide.videoId })
+        : await supabase.from('episode_likes').delete().eq('video_id', slide.videoId)
+      if (res.error) setLikes((l) => ({ ...l, [slide.videoId!]: cur }))
+    },
+    [supabase, userId, likes],
+  )
+
+  const toggleSave = useCallback(
+    async (slide: FeedSlide) => {
+      if (!supabase || !userId) return
+      const cur = savedSeries[slide.seriesId] ?? false
+      setSavedSeries((s) => ({ ...s, [slide.seriesId]: !cur }))
+      const res = !cur
+        ? await supabase.from('series_follows').insert({ user_id: userId, series_id: slide.seriesId })
+        : await supabase.from('series_follows').delete().eq('series_id', slide.seriesId)
+      if (res.error) setSavedSeries((s) => ({ ...s, [slide.seriesId]: cur }))
+    },
+    [supabase, userId, savedSeries],
+  )
+
+  const share = useCallback(async (slide: FeedSlide) => {
+    const url = slide.videoId
+      ? `${window.location.origin}/watch/${slide.videoId}`
+      : `${window.location.origin}/series/${slide.seriesSlug}`
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: slide.seriesTitle, url })
+      } else {
+        await navigator.clipboard.writeText(url)
+        setShareNote(true)
+        setTimeout(() => setShareNote(false), 1800)
+      }
+    } catch {
+      /* dismissed the sheet — not an error */
+    }
+  }, [])
 
   // Mint cache: videoId → playback until its own TTL. The ref is the truth;
   // `states` mirrors it for rendering.
@@ -216,6 +286,70 @@ export function FeedPlayer({ slides, signedIn }: { slides: FeedSlide[]; signedIn
               >
                 {muted ? '🔇' : '🔊'}
               </button>
+            )}
+
+            {/* ── the action rail: like / save / share ─────────────────── */}
+            <div className="absolute bottom-44 right-3 z-10 flex flex-col items-center gap-4">
+              {signedIn && slide.videoId ? (
+                <button
+                  onClick={() => void toggleLike(slide)}
+                  aria-pressed={likes[slide.videoId]?.liked ?? false}
+                  aria-label={likes[slide.videoId]?.liked ? 'Unlike' : 'Like'}
+                  className="flex flex-col items-center gap-0.5"
+                >
+                  <span
+                    className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-xl backdrop-blur transition-transform active:scale-90"
+                    style={{ color: likes[slide.videoId]?.liked ? 'var(--brand)' : '#fff' }}
+                  >
+                    {likes[slide.videoId]?.liked ? '♥' : '♡'}
+                  </span>
+                  <span className="text-[11px] tabular-nums text-white/85">
+                    {viewsLabel(likes[slide.videoId]?.count ?? 0)}
+                  </span>
+                </button>
+              ) : (
+                <Link href="/sign-in" aria-label="Sign in to like" className="flex flex-col items-center gap-0.5">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-xl text-white backdrop-blur">♡</span>
+                  <span className="text-[11px] tabular-nums text-white/85">{viewsLabel(slide.likeCount)}</span>
+                </Link>
+              )}
+
+              {signedIn ? (
+                <button
+                  onClick={() => void toggleSave(slide)}
+                  aria-pressed={savedSeries[slide.seriesId] ?? false}
+                  aria-label={savedSeries[slide.seriesId] ? 'Remove from My List' : 'Save to My List'}
+                  className="flex flex-col items-center gap-0.5"
+                >
+                  <span
+                    className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-xl backdrop-blur transition-transform active:scale-90"
+                    style={{ color: savedSeries[slide.seriesId] ? 'var(--brand)' : '#fff' }}
+                  >
+                    {savedSeries[slide.seriesId] ? '✓' : '+'}
+                  </span>
+                  <span className="text-[11px] text-white/85">
+                    {savedSeries[slide.seriesId] ? 'Saved' : 'Save'}
+                  </span>
+                </button>
+              ) : (
+                <Link href="/sign-in" aria-label="Sign in to save" className="flex flex-col items-center gap-0.5">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-xl text-white backdrop-blur">+</span>
+                  <span className="text-[11px] text-white/85">Save</span>
+                </Link>
+              )}
+
+              <button onClick={() => void share(slide)} aria-label="Share" className="flex flex-col items-center gap-0.5">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-xl text-white backdrop-blur transition-transform active:scale-90">
+                  ↗
+                </span>
+                <span className="text-[11px] text-white/85">Share</span>
+              </button>
+            </div>
+
+            {shareNote && isActive && (
+              <p className="pointer-events-none absolute inset-x-0 bottom-36 text-center text-xs text-white/90">
+                Link copied ✓
+              </p>
             )}
           </section>
         )
