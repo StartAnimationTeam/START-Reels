@@ -69,6 +69,8 @@ const EXPECTED = [
   'daily_reward_claims',
   // Series pivot (0017)
   'series', 'series_categories', 'series_tags', 'series_follows', 'episode_likes',
+  // Rewarded ads (0027)
+  'ad_reward_events',
 ]
 
 const tables = await sql(`
@@ -271,7 +273,25 @@ for (const jobname of ['sweep-stale-holds', 'publish-scheduled-series']) {
 // ── settings seeded ───────────────────────────────────────────────────────
 console.log('\nPlatform settings:')
 const settings = await sql(`select count(*)::int as n from public.platform_settings`)
-check('settings seeded', settings[0].n >= 12, `found ${settings[0].n}`)
+check('settings seeded', settings[0].n >= 17, `found ${settings[0].n}`)
+
+// Rewarded ads (0027): all five knobs exist and are the right shape.
+const adKeys = await sql(`
+  select key, value from public.platform_settings
+  where key in ('ad_rewards_enabled', 'ad_test_mode', 'ad_reward_amount',
+                'ad_reward_daily_cap', 'ad_reward_min_interval_seconds')
+`)
+const adByKey = new Map(adKeys.map((r) => [r.key, r.value]))
+check('all five ad_reward settings seeded', adByKey.size === 5, `found ${[...adByKey.keys()].join(', ')}`)
+check(
+  'ad bools are bools, ad numbers are non-negative ints',
+  typeof adByKey.get('ad_rewards_enabled') === 'boolean' &&
+    typeof adByKey.get('ad_test_mode') === 'boolean' &&
+    ['ad_reward_amount', 'ad_reward_daily_cap', 'ad_reward_min_interval_seconds'].every(
+      (k) => Number.isInteger(adByKey.get(k)) && adByKey.get(k) >= 0,
+    ),
+  JSON.stringify(Object.fromEntries(adByKey)),
+)
 
 const window = await sql(`
   select value #>> '{}' as v from public.platform_settings where key = 'entitlement_window_hours'

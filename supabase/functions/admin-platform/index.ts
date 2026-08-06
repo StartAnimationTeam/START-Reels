@@ -48,6 +48,13 @@ const SETTING_RULES: Record<string, (v: unknown) => boolean> = {
   daily_reward_ladder: (v) =>
     Array.isArray(v) && v.length === 7 &&
     v.every((n) => Number.isInteger(n) && n >= 1 && n <= 50),
+  // Rewarded ads (0027). ad_test_mode arms ads-ssv's unsigned test rail —
+  // leave false outside of test runs; the secret header alone is not enough.
+  ad_rewards_enabled: (v) => typeof v === 'boolean',
+  ad_test_mode: (v) => typeof v === 'boolean',
+  ad_reward_amount: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 100,
+  ad_reward_daily_cap: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 100,
+  ad_reward_min_interval_seconds: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 3600,
 }
 
 interface Body {

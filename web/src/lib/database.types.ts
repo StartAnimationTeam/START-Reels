@@ -143,6 +143,21 @@ export interface Database {
         Update: never
         Relationships: []
       }
+      ad_reward_events: {
+        Row: {
+          id: string
+          user_id: string
+          provider: 'gpt_web' | 'admob' | 'test'
+          transaction_id: string
+          amount: number
+          ledger_id: string | null
+          metadata: Json
+          created_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       episode_likes: {
         Row: { user_id: string; video_id: string; created_at: string }
         // Client-writable, favorites-shaped (0026); counts live on

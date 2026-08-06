@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import { CheckinLadder } from './CheckinLadder'
+import { RewardedAdCard } from './RewardedAdCard'
 import { currentUser } from '@/lib/auth'
 import { creditLabel } from '@/lib/labels'
 import { createServerSupabase } from '@/lib/supabase-server'
@@ -36,17 +37,26 @@ export default async function RewardsPage() {
   }
 
   const supabase = await createServerSupabase()
-  const [settingsRes, claimsRes, balanceRes] = await Promise.all([
+  const [settingsRes, claimsRes, balanceRes, adEventsRes] = await Promise.all([
     supabase
       .from('platform_settings')
       .select('key, value')
-      .in('key', ['daily_reward_ladder', 'daily_reward_enabled', 'daily_reward_amount', 'platform_timezone']),
+      .in('key', [
+        'daily_reward_ladder', 'daily_reward_enabled', 'daily_reward_amount', 'platform_timezone',
+        'ad_rewards_enabled', 'ad_reward_amount', 'ad_reward_daily_cap',
+      ]),
     supabase
       .from('daily_reward_claims')
       .select('claim_date, streak_day, amount')
       .order('claim_date', { ascending: false })
       .limit(2),
     supabase.from('credit_balances').select('available_balance').maybeSingle(),
+    // Own rows via RLS; the platform-day filter happens below where tz is known.
+    supabase
+      .from('ad_reward_events')
+      .select('created_at')
+      .order('created_at', { ascending: false })
+      .limit(50),
   ])
 
   const setting = (k: string) => settingsRes.data?.find((s) => s.key === k)?.value
@@ -82,6 +92,16 @@ export default async function RewardsPage() {
 
   const balance = Number(balanceRes.data?.available_balance ?? 0)
 
+  // Ad-reward state for the card: today's grants counted on the PLATFORM's
+  // calendar, same clock as everything else (trap #17).
+  const adEnabled = String(setting('ad_rewards_enabled') ?? 'true') === 'true'
+  const adAmount = Number(setting('ad_reward_amount') ?? 5)
+  const adDailyCap = Number(setting('ad_reward_daily_cap') ?? 10)
+  const adsToday = (adEventsRes.data ?? []).filter(
+    (e) => new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(e.created_at)) === today,
+  ).length
+  const adUnitPath = process.env.NEXT_PUBLIC_GAM_REWARDED_AD_UNIT ?? null
+
   return (
     <div className="mx-auto max-w-2xl px-4 pb-24 pt-10 sm:px-6">
       <div className="flex items-baseline justify-between">
@@ -101,6 +121,16 @@ export default async function RewardsPage() {
         />
       </div>
 
+      <div className="mt-6">
+        <RewardedAdCard
+          enabled={adEnabled}
+          amount={adAmount}
+          dailyCap={adDailyCap}
+          todayCount={adsToday}
+          adUnitPath={adUnitPath}
+        />
+      </div>
+
       <section className="mt-6 rounded-2xl border border-line bg-surface p-5">
         <h2 className="text-sm font-medium text-ink-secondary">More ways to earn</h2>
         <ul className="mt-3 space-y-3 text-sm">
@@ -116,7 +146,7 @@ export default async function RewardsPage() {
           <li className="flex items-center justify-between gap-3">
             {/* Boundary states itself (trap #15): tasks that need systems we
                 haven't shipped say "soon", they don't render dead buttons. */}
-            <span className="text-ink-muted">Watch ads, link accounts, invite friends</span>
+            <span className="text-ink-muted">Link accounts, invite friends</span>
             <span className="rounded-full border border-line px-2.5 py-0.5 text-[11px] text-ink-faint">
               Coming soon
             </span>

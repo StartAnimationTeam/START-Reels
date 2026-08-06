@@ -64,3 +64,9 @@ verify_jwt = false
 
 [functions.series-manage]
 verify_jwt = false
+
+[functions.ads-claim]
+verify_jwt = false
+
+[functions.ads-ssv]
+verify_jwt = false

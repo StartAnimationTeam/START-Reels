@@ -398,7 +398,7 @@ async function main() {
 
     // -- 3. anonymous access ----------------------------------------------
     console.log('\nAnonymous access (publishable key only, no user token):')
-    for (const table of ['profiles', 'credit_ledger', 'user_roles', 'audit_logs', 'favorites', 'series_follows', 'episode_likes']) {
+    for (const table of ['profiles', 'credit_ledger', 'user_roles', 'audit_logs', 'favorites', 'series_follows', 'episode_likes', 'ad_reward_events']) {
       const r = await rest(`${table}?select=*&limit=5`, {})
       const n = Array.isArray(r.data) ? r.data.length : 0
       check(`anon reads nothing from ${table}`, n === 0, `saw ${n} rows`)
@@ -448,6 +448,43 @@ async function main() {
         },
       })
       check("Bob cannot call reserve_credits() against Alice's account", !r.ok, `HTTP ${r.status} - RPC SUCCEEDED`)
+    }
+    {
+      // grant_ad_reward (0027) takes a p_user_id too - same trap #7 stakes:
+      // callable over PostgREST would mean anyone mints ad coins for anyone.
+      const r = await rest('rpc/grant_ad_reward', {
+        token: B,
+        method: 'POST',
+        body: { p_user_id: bob.id, p_provider: 'gpt_web', p_transaction_id: `rls-${Date.now()}` },
+      })
+      check('Bob cannot call grant_ad_reward() over PostgREST', !r.ok, `HTTP ${r.status} - RPC SUCCEEDED`)
+    }
+    {
+      // ad_reward_events isolation: Alice's ad grants are hers alone.
+      const tx = `rls-iso-${Date.now()}`
+      await svc('ad_reward_events', {
+        method: 'POST',
+        body: { user_id: alice.id, provider: 'test', transaction_id: tx, amount: 1 },
+      })
+      const aliceSees = await rest('ad_reward_events?select=transaction_id', { token: A })
+      check(
+        'Alice sees her own ad_reward_events',
+        (aliceSees.data ?? []).some((row) => row.transaction_id === tx),
+        JSON.stringify(aliceSees.data),
+      )
+      const bobSees = await rest('ad_reward_events?select=user_id', { token: B })
+      check(
+        "Bob sees none of Alice's ad_reward_events",
+        !(bobSees.data ?? []).some((row) => row.user_id === alice.id),
+        JSON.stringify(bobSees.data),
+      )
+      const forge = await rest('ad_reward_events', {
+        token: B,
+        method: 'POST',
+        body: { user_id: bob.id, provider: 'test', transaction_id: `rls-forge-${Date.now()}`, amount: 999 },
+      })
+      check('Bob cannot insert his own ad_reward_events', !forge.ok, `HTTP ${forge.status} - INSERT SUCCEEDED`)
+      await svc(`ad_reward_events?transaction_id=eq.${tx}`, { method: 'DELETE' })
     }
     {
       const r = await rest(`profiles?user_id=eq.${bob.id}`, {

@@ -1,0 +1,7 @@
+# Placeholder — replaced in Phase B of the ads plan once Google Ad Manager
+# issues a network code. The live line will look like:
+# google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0
+#
+# NOTE: ads.txt must live at the REGISTRABLE domain root. If the final site
+# is a subdomain (e.g. reels.startlands.com), this file must be served from
+# the parent domain (startlands.com/ads.txt) instead of here.

@@ -39,6 +39,13 @@ export interface PlaybackResult {
   durationSeconds: number | null
 }
 
+export interface AdClaimResult {
+  status: 'granted' | 'duplicate'
+  amount: number
+  today_count?: number
+  daily_cap?: number
+}
+
 export function useApi() {
   const { getToken } = useAuth()
 
@@ -69,6 +76,11 @@ export function useApi() {
     unlockVideo: (videoId: string) => call<UnlockResult>('video-unlock', { videoId }),
     startPlayback: (videoId: string, device?: string) =>
       call<PlaybackResult>('video-playback', { videoId, device }),
+    // The web rewarded-ad claim: claimToken is a client-minted UUID per ad
+    // load, making event double-fires and fetch retries idempotent. The
+    // server owns every real rule (caps, intervals, amounts).
+    claimAdReward: (claimToken: string) => call<AdClaimResult>('ads-claim', { claimToken }),
+
     heartbeat: (sessionId: string, seconds: number, position: number, ended = false) =>
       call<{ credited: number; settled: boolean }>('watch-heartbeat', {
         sessionId,

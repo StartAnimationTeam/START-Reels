@@ -119,6 +119,13 @@ export default async function ProfilePage() {
           </Link>
         ))}
       </nav>
+
+      <footer className="mt-10 text-center text-xs text-ink-faint">
+        <Link href="/privacy" className="hover:text-ink-secondary">
+          Privacy Policy
+        </Link>
+        <span className="mx-2">·</span>© START LANDS Inc.
+      </footer>
     </div>
   )
 }

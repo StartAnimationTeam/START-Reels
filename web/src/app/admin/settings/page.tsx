@@ -30,6 +30,11 @@ export default async function AdminSettingsPage() {
             entitlement_window_hours: Number(settings.entitlement_window_hours ?? 48),
             settle_after_seconds: Number(settings.settle_after_seconds ?? 30),
             max_concurrent_streams: Number(settings.max_concurrent_streams ?? 2),
+            ad_rewards_enabled: settings.ad_rewards_enabled === true || settings.ad_rewards_enabled === 'true',
+            ad_test_mode: settings.ad_test_mode === true || settings.ad_test_mode === 'true',
+            ad_reward_amount: Number(settings.ad_reward_amount ?? 5),
+            ad_reward_daily_cap: Number(settings.ad_reward_daily_cap ?? 10),
+            ad_reward_min_interval_seconds: Number(settings.ad_reward_min_interval_seconds ?? 30),
           }}
         />
       </div>

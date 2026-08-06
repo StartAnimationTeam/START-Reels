@@ -14,6 +14,11 @@ interface Values {
   entitlement_window_hours: number
   settle_after_seconds: number
   max_concurrent_streams: number
+  ad_rewards_enabled: boolean
+  ad_test_mode: boolean
+  ad_reward_amount: number
+  ad_reward_daily_cap: number
+  ad_reward_min_interval_seconds: number
 }
 
 const NUMBERS: Array<{ key: keyof Values; label: string; hint: string; min: number; max: number }> = [
@@ -22,6 +27,9 @@ const NUMBERS: Array<{ key: keyof Values; label: string; hint: string; min: numb
   { key: 'entitlement_window_hours', label: 'Unlock window (hours)', hint: 'How long a paid unlock lasts', min: 1, max: 720 },
   { key: 'settle_after_seconds', label: 'Settle threshold (seconds)', hint: 'Validated watch time before a hold commits', min: 5, max: 600 },
   { key: 'max_concurrent_streams', label: 'Concurrent streams', hint: 'Live sessions per unlock', min: 1, max: 10 },
+  { key: 'ad_reward_amount', label: 'Ad reward', hint: 'Coins per rewarded ad watched', min: 0, max: 100 },
+  { key: 'ad_reward_daily_cap', label: 'Ad daily cap', hint: 'Rewarded ads a user can claim per day (Manila day)', min: 0, max: 100 },
+  { key: 'ad_reward_min_interval_seconds', label: 'Ad cooldown (seconds)', hint: 'Minimum gap between two ad claims', min: 0, max: 3600 },
 ]
 
 export function SettingsPanel({ initial }: { initial: Values }) {
@@ -101,6 +109,65 @@ export function SettingsPanel({ initial }: { initial: Values }) {
             className="rounded-lg border border-line-strong px-4 py-2 text-sm text-ink-secondary hover:border-brand hover:text-ink disabled:opacity-40"
           >
             {values.daily_reward_enabled ? 'Enabled — turn off' : 'Disabled — turn on'}
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-line bg-surface p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-ink">Ad rewards</p>
+            <p className="mt-0.5 text-xs text-ink-muted">
+              &ldquo;Watch an ad, earn coins&rdquo; on the Rewards page. Amounts and caps below.
+            </p>
+          </div>
+          <button
+            disabled={busy === 'ad_rewards_enabled'}
+            onClick={() => {
+              const next = !values.ad_rewards_enabled
+              setValues({ ...values, ad_rewards_enabled: next })
+              void save('ad_rewards_enabled', next)
+            }}
+            className="rounded-lg border border-line-strong px-4 py-2 text-sm text-ink-secondary hover:border-brand hover:text-ink disabled:opacity-40"
+          >
+            {values.ad_rewards_enabled ? 'Enabled — turn off' : 'Disabled — turn on'}
+          </button>
+        </div>
+      </div>
+
+      {/* The test rail mints coins without a real ad — warning colors when
+          armed, same treatment as maintenance mode. */}
+      <div
+        className="rounded-xl border p-4"
+        style={
+          values.ad_test_mode
+            ? { borderColor: 'var(--warning)', background: 'rgb(255 190 92 / 0.06)' }
+            : { borderColor: 'var(--border)', background: 'var(--surface)' }
+        }
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-ink">Ad test mode</p>
+            <p className="mt-0.5 text-xs text-ink-muted">
+              Arms the unsigned test rail (still needs the server secret). Only during
+              verification runs — turn OFF for normal operation.
+            </p>
+          </div>
+          <button
+            disabled={busy === 'ad_test_mode'}
+            onClick={() => {
+              const next = !values.ad_test_mode
+              setValues({ ...values, ad_test_mode: next })
+              void save('ad_test_mode', next)
+            }}
+            className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-40"
+            style={
+              values.ad_test_mode
+                ? { background: 'var(--warning)', color: 'white' }
+                : { border: '1px solid var(--border-strong)', color: 'var(--ink-secondary)' }
+            }
+          >
+            {values.ad_test_mode ? 'Armed — turn OFF' : 'Off — arm'}
           </button>
         </div>
       </div>

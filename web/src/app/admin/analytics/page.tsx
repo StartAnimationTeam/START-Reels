@@ -198,6 +198,7 @@ export default async function AdminAnalyticsPage() {
     followsTotal,
     followsRecent,
     { data: claims },
+    { data: adRewards },
   ] = await Promise.all([
     supabase
       .from('platform_daily_stats')
@@ -215,6 +216,8 @@ export default async function AdminAnalyticsPage() {
     supabase.from('series_follows').select('*', { count: 'exact', head: true }),
     supabase.from('series_follows').select('*', { count: 'exact', head: true }).gte('created_at', sinceIso),
     supabase.from('daily_reward_claims').select('claim_date, streak_day').gte('claim_date', since),
+    // Staff RLS; row count bounded by users × daily cap × 30 days.
+    supabase.from('ad_reward_events').select('amount, user_id').gte('created_at', sinceIso),
   ])
 
   const days = (daily ?? []) as unknown as DayRow[]
@@ -306,6 +309,11 @@ export default async function AdminAnalyticsPage() {
 
   const completionRate = totalViews > 0 ? totalCompletions / totalViews : null
 
+  // ── rewarded ads (30d): watches, coins minted, distinct watchers ────────
+  const adRows = (adRewards ?? []) as Array<{ amount: number; user_id: string }>
+  const adCoins = adRows.reduce((sum, r) => sum + Number(r.amount), 0)
+  const adWatchers = new Set(adRows.map((r) => r.user_id)).size
+
   const divergence =
     latest?.bunny_watch_seconds != null && Number(latest.watch_seconds) > 0
       ? Math.abs(Number(latest.watch_seconds) - Number(latest.bunny_watch_seconds)) / Number(latest.watch_seconds)
@@ -350,7 +358,7 @@ export default async function AdminAnalyticsPage() {
           </div>
 
           {/* ── economy tiles ────────────────────────────────────────────── */}
-          <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-5">
             <StatTile label="Unlocks (30d)" value={String(totalUnlocks)} sub="paid + free-window entitlements" />
             <StatTile
               label="Coin economy (30d)"
@@ -366,6 +374,11 @@ export default async function AdminAnalyticsPage() {
               label="Check-ins (30d)"
               value={String(claimRows.length)}
               sub={`${deepStreaks} at streak day 3+`}
+            />
+            <StatTile
+              label="Ad rewards (30d)"
+              value={String(adRows.length)}
+              sub={adRows.length > 0 ? `${adCoins} coins to ${adWatchers} ${adWatchers === 1 ? 'user' : 'users'}` : 'no ad watches yet'}
             />
           </div>
 
