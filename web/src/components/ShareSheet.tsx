@@ -91,7 +91,9 @@ export function ShareSheet({ target, onClose }: { target: ShareTarget | null; on
   ]
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Share">
+    // z-[60]: must clear BottomNav and the top Nav (both z-50) — a modal
+    // that loses to the tab bar hides its own buttons behind it.
+    <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Share">
       {/* backdrop */}
       <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/60" />
 
