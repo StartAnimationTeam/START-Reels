@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { StreamPlayer } from '@/components/player/StreamPlayer'
-import { Watermark, watermarkLabel } from '@/components/player/Watermark'
 import { ApiError, useApi, type PlaybackResult } from '@/lib/api'
 import { episodeLabel, errorLabel, viewsLabel } from '@/lib/labels'
 import { useSupabase } from '@/lib/supabase-browser'
@@ -209,20 +208,17 @@ export function FeedPlayer({
           >
             {/* stage: only the active slide mounts a player */}
             {isActive && state.kind === 'ready' ? (
-              <>
-                <StreamPlayer
-                  src={state.playback.url}
-                  sessionId={state.playback.sessionId}
-                  poster={poster}
-                  vertical
-                  autoPlay
-                  muted={muted}
-                  loop
-                  hideControls
-                  className="h-full w-full object-cover"
-                />
-                <Watermark label={watermarkLabel(userId)} />
-              </>
+              <StreamPlayer
+                src={state.playback.url}
+                sessionId={state.playback.sessionId}
+                poster={poster}
+                vertical
+                autoPlay
+                muted={muted}
+                loop
+                hideControls
+                className="h-full w-full object-cover"
+              />
             ) : (
               <div
                 className="h-full w-full"
