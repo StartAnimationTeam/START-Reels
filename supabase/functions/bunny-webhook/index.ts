@@ -95,7 +95,9 @@ Deno.serve(async (req) => {
       if (video.thumbnailFileName) {
         try {
           const signedThumb = await signFileUrl(guid, video.thumbnailFileName, 300)
-          const res = await fetch(signedThumb)
+          // The pull zone blocks refererless requests (anti-download); this
+          // server-side fetch must present the site referer or it 403s.
+          const res = await fetch(signedThumb, { headers: { Referer: 'https://startreels.com/' } })
           if (!res.ok) {
             thumbDebug = `cdn_fetch_${res.status}`
           } else {

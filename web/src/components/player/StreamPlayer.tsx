@@ -142,6 +142,11 @@ export function StreamPlayer({
       muted={muted}
       loop={loop}
       onEnded={onEnded}
+      // Deterrence tier, honestly held (trap #16): right-click "Save video
+      // as…" and PiP popouts are closed doors for honest people; the real
+      // gates are the entitlement check and the CDN's referer + token rules.
+      onContextMenu={(e) => e.preventDefault()}
+      disablePictureInPicture
       poster={poster ?? undefined}
       className={
         className ??

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { StreamPlayer } from '@/components/player/StreamPlayer'
+import { Watermark, watermarkLabel } from '@/components/player/Watermark'
 import { ApiError, useApi, type PlaybackResult } from '@/lib/api'
 import { announceCoinsDelta } from '@/lib/coins'
 import { creditLabel, episodeLabel, episodeProgressLabel, errorLabel, viewsLabel } from '@/lib/labels'
@@ -299,19 +300,22 @@ export function WatchExperience({
           <section key={slide.id} data-index={index} className="relative h-full w-full snap-start snap-always">
             {/* stage */}
             {isActive && open && state.kind === 'ready' ? (
-              <StreamPlayer
-                src={state.playback.url}
-                sessionId={state.playback.sessionId}
-                poster={slide.thumbnailUrl}
-                vertical
-                autoPlay
-                startAt={slide.id === entryId ? resumeAt : 0}
-                onEnded={advance}
-                onExpired={() => {
-                  cacheRef.current.delete(slide.id)
-                  void ensureMint(slide) // fresh URL = fresh entitlement check
-                }}
-              />
+              <>
+                <StreamPlayer
+                  src={state.playback.url}
+                  sessionId={state.playback.sessionId}
+                  poster={slide.thumbnailUrl}
+                  vertical
+                  autoPlay
+                  startAt={slide.id === entryId ? resumeAt : 0}
+                  onEnded={advance}
+                  onExpired={() => {
+                    cacheRef.current.delete(slide.id)
+                    void ensureMint(slide) // fresh URL = fresh entitlement check
+                  }}
+                />
+                <Watermark label={watermarkLabel(userId)} />
+              </>
             ) : (
               <div
                 className="flex h-full items-center justify-center"
