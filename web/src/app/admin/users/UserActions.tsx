@@ -102,11 +102,27 @@ export function UserActions({
       </button>
 
       {!grantOpen ? (
-        <button disabled={busy || adminOnly} title={adminTitle} className={button} onClick={() => setGrantOpen(true)}>
+        <button
+          disabled={busy || adminOnly}
+          title={adminTitle}
+          className={button}
+          onClick={() => {
+            setGrantOpen(true)
+            setMemberOpen(false)
+          }}
+        >
           Credits…
         </button>
       ) : (
         <span className="flex items-center gap-1">
+          <button
+            disabled={busy}
+            aria-label="Close credits controls"
+            className={button}
+            onClick={() => setGrantOpen(false)}
+          >
+            ‹
+          </button>
           <input
             type="number"
             min={1}
@@ -128,11 +144,27 @@ export function UserActions({
 
       {/* membership: the only door until payments exist */}
       {!memberOpen ? (
-        <button disabled={busy || adminOnly} title={adminTitle} className={button} onClick={() => setMemberOpen(true)}>
+        <button
+          disabled={busy || adminOnly}
+          title={adminTitle}
+          className={button}
+          onClick={() => {
+            setMemberOpen(true)
+            setGrantOpen(false)
+          }}
+        >
           Membership…
         </button>
       ) : (
         <span className="flex items-center gap-1">
+          <button
+            disabled={busy}
+            aria-label="Close membership controls"
+            className={button}
+            onClick={() => setMemberOpen(false)}
+          >
+            ‹
+          </button>
           <button disabled={busy} className={button}
             onClick={() => void run(() => api.user('grant_membership', userId, { tier: 'monthly' }))}>
             +1 month
