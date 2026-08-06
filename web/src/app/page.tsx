@@ -294,14 +294,17 @@ async function CategoriesTab({ anon }: { anon: Anon }) {
     )
   ).filter((shelf) => shelf.series.length > 0)
 
-  if (!shelves.length) {
+  if (!categories.length) {
     return <p className="text-sm text-ink-muted">No categories yet — check back soon.</p>
   }
 
   return (
     <>
-      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
-        {shelves.map(({ category }) => (
+      {/* Every ACTIVE category, wrapping — a single scroll line hid the
+          tail on every screen size the moment the taxonomy grew. Shelves
+          below still only render categories that have shows. */}
+      <div className="flex flex-wrap gap-2">
+        {categories.map((category) => (
           <Link
             key={category.id}
             href={`/category/${category.slug}`}
