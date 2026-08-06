@@ -57,6 +57,16 @@ export function StreamPlayer({
 
   useHeartbeat(sessionId, videoEl)
 
+  // Callers pass onExpired inline, so its identity changes every parent
+  // render (chrome fades, like counts, prefetch states…). Playback must
+  // survive all of that — only a genuinely new src may rebuild the player —
+  // so the effect below reads the callback through a ref instead of
+  // depending on it.
+  const onExpiredRef = useRef(onExpired)
+  useEffect(() => {
+    onExpiredRef.current = onExpired
+  })
+
   useEffect(() => {
     const video = videoRef.current
     if (!video || !startAt || startAt <= 0) return
@@ -106,7 +116,7 @@ export function StreamPlayer({
         (data.response?.code === 403 || data.response?.code === 401)
       ) {
         // Token expired mid-session: ask the page for a fresh signed URL.
-        onExpired?.()
+        onExpiredRef.current?.()
         return
       }
       // Standard recovery ladder for everything else.
@@ -121,7 +131,7 @@ export function StreamPlayer({
     return () => {
       hls.destroy()
     }
-  }, [src, onExpired])
+  }, [src])
 
   return (
     <video
