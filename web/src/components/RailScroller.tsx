@@ -5,11 +5,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 /**
  * The Netflix affordance: a horizontal shelf with page-arrows at its edges.
  *
- * Arrows are desktop furniture — they render from `sm:` up and only when
- * there is actually somewhere to go in that direction (an arrow that does
- * nothing reads as broken). Phones keep the native swipe; the scroll
- * container itself is unchanged, so snap and momentum behave exactly as
- * before.
+ * Arrows render on every screen size (owner call — phones get them too,
+ * a touch smaller), and only when there is actually somewhere to go in
+ * that direction (an arrow that does nothing reads as broken). Native
+ * swipe is untouched — the scroll container itself is unchanged, so snap
+ * and momentum behave exactly as before.
  */
 export function RailScroller({ children, className }: { children: React.ReactNode; className: string }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -42,7 +42,7 @@ export function RailScroller({ children, className }: { children: React.ReactNod
   }
 
   const arrow =
-    'absolute top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/60 text-xl text-white backdrop-blur transition-opacity hover:bg-black/80 sm:flex'
+    'absolute top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-black/60 text-lg text-white backdrop-blur transition-opacity hover:bg-black/80 sm:h-10 sm:w-10 sm:text-xl'
 
   return (
     <div className="relative">
