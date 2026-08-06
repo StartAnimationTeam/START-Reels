@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { StreamPlayer } from '@/components/player/StreamPlayer'
+import { ShareSheet, type ShareTarget } from '@/components/ShareSheet'
 import { ApiError, useApi, type PlaybackResult } from '@/lib/api'
 import { announceCoinsDelta } from '@/lib/coins'
 import { creditLabel, episodeLabel, episodeProgressLabel, errorLabel, viewsLabel } from '@/lib/labels'
@@ -235,7 +236,7 @@ export function WatchExperience({
     Object.fromEntries(slides.map((s) => [s.id, { liked: s.liked, count: s.likeCount }])),
   )
   const [saved, setSaved] = useState(initiallyFollowed)
-  const [shareNote, setShareNote] = useState(false)
+  const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null)
 
   const toggleLike = useCallback(
     async (slide: EpisodeSlide) => {
@@ -261,20 +262,15 @@ export function WatchExperience({
     if (res.error) setSaved(!flipped)
   }, [supabase, userId, saved, seriesId])
 
+  // Opens the in-house sheet: socials first, caption included. The native
+  // OS sheet survives inside it as "More…".
   const share = useCallback(
-    async (slide: EpisodeSlide) => {
-      const url = `${window.location.origin}/watch/${slide.id}`
-      try {
-        if (navigator.share) {
-          await navigator.share({ title: seriesTitle, url })
-        } else {
-          await navigator.clipboard.writeText(url)
-          setShareNote(true)
-          setTimeout(() => setShareNote(false), 1800)
-        }
-      } catch {
-        /* user dismissed the share sheet — not an error */
-      }
+    (slide: EpisodeSlide) => {
+      setShareTarget({
+        title: seriesTitle,
+        url: `${window.location.origin}/watch/${slide.id}`,
+        episodeNumber: slide.episodeNumber,
+      })
     },
     [seriesTitle],
   )
@@ -493,7 +489,7 @@ export function WatchExperience({
               )}
 
               <button
-                onClick={() => void share(slide)}
+                onClick={() => share(slide)}
                 aria-label="Share this episode"
                 className="flex flex-col items-center gap-0.5"
               >
@@ -504,12 +500,6 @@ export function WatchExperience({
               </button>
             </div>
 
-            {shareNote && isActive && (
-              <p className="pointer-events-none absolute inset-x-0 bottom-14 text-center text-xs text-white/90">
-                Link copied ✓
-              </p>
-            )}
-
             {/* swipe affordance — only where a next slide exists */}
             {isActive && index < slides.length - 1 && (
               <p className={`pointer-events-none absolute inset-x-0 bottom-2 text-center text-[11px] text-white/50 ${chromeFade}`}>
@@ -519,6 +509,8 @@ export function WatchExperience({
           </section>
         )
       })}
+
+      <ShareSheet target={shareTarget} onClose={() => setShareTarget(null)} />
     </div>
   )
 }

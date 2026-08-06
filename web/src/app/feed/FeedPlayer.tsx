@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { StreamPlayer } from '@/components/player/StreamPlayer'
+import { ShareSheet, type ShareTarget } from '@/components/ShareSheet'
 import { ApiError, useApi, type PlaybackResult } from '@/lib/api'
 import { episodeLabel, errorLabel, viewsLabel } from '@/lib/labels'
 import { useSupabase } from '@/lib/supabase-browser'
@@ -74,7 +75,7 @@ export function FeedPlayer({
   const [savedSeries, setSavedSeries] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(slides.map((s) => [s.seriesId, s.followed])),
   )
-  const [shareNote, setShareNote] = useState(false)
+  const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null)
 
   const toggleLike = useCallback(
     async (slide: FeedSlide) => {
@@ -103,21 +104,17 @@ export function FeedPlayer({
     [supabase, userId, savedSeries],
   )
 
-  const share = useCallback(async (slide: FeedSlide) => {
-    const url = slide.videoId
-      ? `${window.location.origin}/watch/${slide.videoId}`
-      : `${window.location.origin}/series/${slide.seriesSlug}`
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: slide.seriesTitle, url })
-      } else {
-        await navigator.clipboard.writeText(url)
-        setShareNote(true)
-        setTimeout(() => setShareNote(false), 1800)
-      }
-    } catch {
-      /* dismissed the sheet — not an error */
-    }
+  // Opens the in-house sheet: socials first, caption included. The native
+  // OS sheet survives inside it as "More…".
+  const share = useCallback((slide: FeedSlide) => {
+    setShareTarget({
+      title: slide.seriesTitle,
+      url: slide.videoId
+        ? `${window.location.origin}/watch/${slide.videoId}`
+        : `${window.location.origin}/series/${slide.seriesSlug}`,
+      episodeNumber: slide.videoId ? 1 : undefined,
+      synopsis: slide.synopsis,
+    })
   }, [])
 
   // Mint cache: videoId → playback until its own TTL. The ref is the truth;
@@ -338,7 +335,7 @@ export function FeedPlayer({
                 </Link>
               )}
 
-              <button onClick={() => void share(slide)} aria-label="Share" className="flex flex-col items-center gap-0.5">
+              <button onClick={() => share(slide)} aria-label="Share" className="flex flex-col items-center gap-0.5">
                 <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-xl text-white backdrop-blur transition-transform active:scale-90">
                   ↗
                 </span>
@@ -346,14 +343,11 @@ export function FeedPlayer({
               </button>
             </div>
 
-            {shareNote && isActive && (
-              <p className="pointer-events-none absolute inset-x-0 bottom-36 text-center text-xs text-white/90">
-                Link copied ✓
-              </p>
-            )}
           </section>
         )
       })}
+
+      <ShareSheet target={shareTarget} onClose={() => setShareTarget(null)} />
     </div>
   )
 }
