@@ -20,12 +20,15 @@ export function UserActions({
   roles,
   suspended,
   banned,
+  member,
   viewerIsAdmin,
 }: {
   userId: string
   roles: string[]
   suspended: boolean
   banned: boolean
+  /** Has an ACTIVE membership right now. */
+  member: boolean
   viewerIsAdmin: boolean
 }) {
   const api = useAdminApi()
@@ -33,6 +36,7 @@ export function UserActions({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [grantOpen, setGrantOpen] = useState(false)
+  const [memberOpen, setMemberOpen] = useState(false)
   const [amount, setAmount] = useState(10)
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -46,6 +50,7 @@ export function UserActions({
     } finally {
       setBusy(false)
       setGrantOpen(false)
+      setMemberOpen(false)
     }
   }
 
@@ -118,6 +123,30 @@ export function UserActions({
             onClick={() => void run(() => api.user('deduct_credits', userId, { amount }))}>
             Deduct
           </button>
+        </span>
+      )}
+
+      {/* membership: the only door until payments exist */}
+      {!memberOpen ? (
+        <button disabled={busy || adminOnly} title={adminTitle} className={button} onClick={() => setMemberOpen(true)}>
+          Membership…
+        </button>
+      ) : (
+        <span className="flex items-center gap-1">
+          <button disabled={busy} className={button}
+            onClick={() => void run(() => api.user('grant_membership', userId, { tier: 'monthly' }))}>
+            +1 month
+          </button>
+          <button disabled={busy} className={button}
+            onClick={() => void run(() => api.user('grant_membership', userId, { tier: 'annual' }))}>
+            +1 year
+          </button>
+          {member && (
+            <button disabled={busy} className={button}
+              onClick={() => void run(() => api.user('revoke_membership', userId))}>
+              End now
+            </button>
+          )}
         </span>
       )}
 

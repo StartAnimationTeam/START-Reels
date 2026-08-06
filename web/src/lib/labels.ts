@@ -62,14 +62,17 @@ export function episodeProgressLabel(current: number, total: number): string {
 }
 
 /**
- * Membership is a SHELL until payments exist. The boundary must say so
- * (trap #15): a visible "coming soon", never a dead Join button.
+ * Membership MACHINERY is live (0028): members unlock every episode free
+ * and members-only dramas are enforced. But SELF-SERVE JOINING waits for
+ * payments — until then memberships are granted by administrators, and the
+ * boundary must say so (trap #15): a visible "coming soon", never a dead
+ * Join button.
  */
 export const MEMBERSHIP_COMING_SOON =
-  'Memberships are coming soon. Until then, every episode unlocks with coins.'
+  'Buying a membership opens soon. Until then, every episode unlocks with coins.'
 
 export const MEMBER_TIER_LABELS: Record<string, string> = {
-  weekly: 'Weekly Membership',
+  monthly: 'Monthly Membership',
   annual: 'Annual Membership',
 }
 
@@ -112,6 +115,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   episode_number_taken: 'That episode number is already used in this series.',
   category_exists: 'A category with that name already exists.',
   banner_required: 'Featuring needs a wide banner first — upload one in Curation.',
+  members_only: 'This drama is for members only.',
   ad_rewards_disabled: 'Ad rewards are paused right now.',
   ad_reward_cap_reached: 'You’ve hit today’s ad limit — come back tomorrow.',
   ad_reward_too_soon: 'One at a time — give it a few seconds and try again.',

@@ -71,6 +71,8 @@ const EXPECTED = [
   'series', 'series_categories', 'series_tags', 'series_follows', 'episode_likes',
   // Rewarded ads (0027)
   'ad_reward_events',
+  // Memberships (0028)
+  'memberships',
 ]
 
 const tables = await sql(`

@@ -52,6 +52,7 @@ export function WatchExperience({
   signedIn,
   userId,
   seriesId,
+  membersOnly,
   initiallyFollowed,
   resumeAt,
   initialBalance,
@@ -65,6 +66,8 @@ export function WatchExperience({
   signedIn: boolean
   userId: string | null
   seriesId: string
+  /** Series is members-only AND this viewer isn't a member (else slides arrive open). */
+  membersOnly: boolean
   initiallyFollowed: boolean
   resumeAt: number
   initialBalance: number
@@ -334,6 +337,25 @@ export function WatchExperience({
                       style={{ background: 'var(--brand-gradient)' }}
                     >
                       Sign in
+                    </Link>
+                  </div>
+                ) : !open && membersOnly ? (
+                  /* members-only: no price, no dead Unlock — the boundary
+                     says what it is and points at the membership page */
+                  <div className="animate-scale-in w-full max-w-xs px-6 text-center">
+                    <p className="text-xs uppercase tracking-widest text-white/70">
+                      {episodeLabel(slide.episodeNumber)}
+                    </p>
+                    <h2 className="mt-2 text-lg font-semibold text-white">{seriesTitle}</h2>
+                    <p className="mt-3 rounded-xl border border-white/15 bg-black/45 p-4 text-sm text-white/85 backdrop-blur">
+                      ✦ {errorLabel('members_only')}
+                    </p>
+                    <Link
+                      href="/member"
+                      className="mt-4 inline-block w-full rounded-lg px-5 py-2.5 text-sm font-medium text-white shadow-[var(--shadow-brand)]"
+                      style={{ background: 'var(--brand-gradient)' }}
+                    >
+                      Explore Membership
                     </Link>
                   </div>
                 ) : !open ? (

@@ -49,6 +49,7 @@ export type EntitlementSource =
   | 'role_bypass'
   | 'promo'
   | 'admin_grant'
+  | 'membership'
 
 export interface Database {
   public: {
@@ -140,6 +141,19 @@ export interface Database {
         // Client-writable, favorites-shaped: RLS WITH CHECK pins user_id to
         // the caller; the column grant excludes created_at.
         Insert: { user_id: string; series_id: string }
+        Update: never
+        Relationships: []
+      }
+      memberships: {
+        Row: {
+          user_id: string
+          tier: 'monthly' | 'annual'
+          started_at: string
+          expires_at: string
+          granted_by: string | null
+          updated_at: string
+        }
+        Insert: never
         Update: never
         Relationships: []
       }

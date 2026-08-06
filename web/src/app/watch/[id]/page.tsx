@@ -44,7 +44,7 @@ export default async function WatchPage({ params }: Props) {
   const [{ data: series }, { data: siblings }] = await Promise.all([
     supabase
       .from('series')
-      .select('id, slug, title, status, creator_id, free_episode_count, episode_credit_cost, total_episodes')
+      .select('id, slug, title, status, creator_id, free_episode_count, episode_credit_cost, total_episodes, is_members_only')
       .eq('id', video.series_id)
       .maybeSingle(),
     supabase
@@ -57,20 +57,29 @@ export default async function WatchPage({ params }: Props) {
   ])
   if (!series) notFound()
 
+  // Creator/staff bypass and (0028) membership — resolved once, used for
+  // the teaser redirect AND the slide-open flags below. Display only: the
+  // server re-proves all of it in unlock_video.
+  let privileged = false
+  let isMember = false
+  if (userId) {
+    const [roles, membershipRes] = await Promise.all([
+      rolesOf(userId),
+      (await createServerSupabase()).from('memberships').select('expires_at').maybeSingle(),
+    ])
+    privileged =
+      series.creator_id === userId ||
+      roles.includes('moderator') ||
+      roles.includes('administrator')
+    isMember = Boolean(
+      membershipRes.data && Date.parse(membershipRes.data.expires_at) > Date.now(),
+    )
+  }
+
   // An announced-unreleased series is a teaser, not a player. Direct links
   // land on the series page (premiere date + Follow) instead of a wall of
   // refused unlocks — unlock_video (0023) is the real gate; this is manners.
-  if (series.status !== 'published') {
-    let privileged = false
-    if (userId) {
-      const roles = await rolesOf(userId)
-      privileged =
-        series.creator_id === userId ||
-        roles.includes('moderator') ||
-        roles.includes('administrator')
-    }
-    if (!privileged) redirect(`/series/${series.slug}`)
-  }
+  if (series.status !== 'published' && !privileged) redirect(`/series/${series.slug}`)
 
   const episodes = siblings ?? []
   // The entry episode may be unpublished-but-creator-visible; if it isn't in
@@ -113,11 +122,19 @@ export default async function WatchPage({ params }: Props) {
     balance = Number(balanceRes.data?.available_balance ?? 0)
   }
 
+  // Members (and creator/staff) get every episode open — "unlimited series"
+  // IS the benefit; unlock_video charges them 0. On a members-only series
+  // the free window does NOT apply to non-members (the DB gate refuses
+  // before pricing), so their slides stay closed and show the member panel.
+  const bypass = isMember || privileged
   const slides: EpisodeSlide[] = episodes.map((e) => ({
     id: e.id,
     episodeNumber: e.episode_number ?? 0,
     thumbnailUrl: e.thumbnail_url,
-    open: (e.episode_number ?? 0) <= series.free_episode_count || unlockedIds.has(e.id),
+    open:
+      unlockedIds.has(e.id) ||
+      bypass ||
+      (!series.is_members_only && (e.episode_number ?? 0) <= series.free_episode_count),
     likeCount: Number(e.like_count ?? 0),
     liked: likedIds.has(e.id),
   }))
@@ -133,6 +150,7 @@ export default async function WatchPage({ params }: Props) {
       signedIn={Boolean(userId)}
       userId={userId}
       seriesId={series.id}
+      membersOnly={series.is_members_only}
       initiallyFollowed={followed}
       resumeAt={resumeAt}
       initialBalance={balance}

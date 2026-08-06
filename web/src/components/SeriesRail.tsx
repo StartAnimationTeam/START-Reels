@@ -1,5 +1,6 @@
 import Link from 'next/link'
 
+import { RailScroller } from './RailScroller'
 import { SeriesCard } from './SeriesCard'
 import type { CardSeries } from '@/lib/catalog'
 
@@ -37,13 +38,13 @@ export function SeriesRail({
       {series.length === 0 ? (
         <p className="text-sm text-ink-muted">{emptyNote}</p>
       ) : (
-        <div className="no-scrollbar -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6">
+        <RailScroller className="no-scrollbar -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6">
           {series.map((s) => (
             <div key={s.id} className="w-32 shrink-0 snap-start sm:w-40">
               <SeriesCard series={s} />
             </div>
           ))}
-        </div>
+        </RailScroller>
       )}
     </section>
   )

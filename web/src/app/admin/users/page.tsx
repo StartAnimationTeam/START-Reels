@@ -34,10 +34,11 @@ export default async function AdminUsersPage({
     profileQuery = profileQuery.or(`email.ilike.%${query}%,display_name.ilike.%${query}%`)
   }
 
-  const [{ data: profiles }, { data: allRoles }, { data: balances }] = await Promise.all([
+  const [{ data: profiles }, { data: allRoles }, { data: balances }, { data: memberships }] = await Promise.all([
     profileQuery,
     supabase.from('user_roles').select('user_id, role'),
     supabase.from('credit_balances').select('user_id, available_balance'),
+    supabase.from('memberships').select('user_id, tier, expires_at'),
   ])
 
   const rolesByUser = new Map<string, string[]>()
@@ -45,6 +46,11 @@ export default async function AdminUsersPage({
     rolesByUser.set(row.user_id, [...(rolesByUser.get(row.user_id) ?? []), row.role])
   }
   const balanceByUser = new Map((balances ?? []).map((b) => [b.user_id, Number(b.available_balance)]))
+  const membershipByUser = new Map(
+    (memberships ?? [])
+      .filter((m) => Date.parse(m.expires_at) > Date.now())
+      .map((m) => [m.user_id, m]),
+  )
 
   const rows = profiles ?? []
 
@@ -77,6 +83,7 @@ export default async function AdminUsersPage({
                 <th className="px-4 py-2.5 font-medium">User</th>
                 <th className="px-4 py-2.5 font-medium">Role</th>
                 <th className="px-4 py-2.5 font-medium">Credits</th>
+                <th className="px-4 py-2.5 font-medium">Member</th>
                 <th className="px-4 py-2.5 font-medium">State</th>
                 <th className="px-4 py-2.5 font-medium">Joined</th>
                 <th className="px-4 py-2.5 font-medium">Actions</th>
@@ -85,6 +92,7 @@ export default async function AdminUsersPage({
             <tbody className="divide-y divide-[var(--border)]">
               {rows.map((profile) => {
                 const roles = rolesByUser.get(profile.user_id) ?? []
+                const membership = membershipByUser.get(profile.user_id)
                 return (
                   <tr key={profile.user_id} className="bg-background">
                     <td className="max-w-[260px] px-4 py-2.5">
@@ -94,6 +102,17 @@ export default async function AdminUsersPage({
                     <td className="px-4 py-2.5 text-ink-secondary">{roleLabel(roles)}</td>
                     <td className="px-4 py-2.5 tabular-nums text-ink-secondary">
                       {balanceByUser.get(profile.user_id) ?? 0}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {membership ? (
+                        <span className="text-xs" title={`until ${new Date(membership.expires_at).toLocaleDateString()}`}>
+                          <span className="brand-gradient-text font-semibold">
+                            {membership.tier === 'annual' ? 'Annual' : 'Monthly'}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-ink-faint">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5">
                       {profile.deleted_at ? (
@@ -115,6 +134,7 @@ export default async function AdminUsersPage({
                         roles={roles}
                         suspended={Boolean(profile.suspended_at)}
                         banned={Boolean(profile.banned_at)}
+                        member={Boolean(membership)}
                         viewerIsAdmin={viewerIsAdmin}
                       />
                     </td>

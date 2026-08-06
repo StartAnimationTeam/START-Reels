@@ -27,6 +27,7 @@ interface Body {
   action?: string
   userId?: string
   role?: 'creator' | 'moderator' | 'administrator'
+  tier?: 'monthly' | 'annual'
   grant?: boolean
   reason?: string
   until?: string
@@ -188,6 +189,56 @@ Deno.serve(async (req) => {
       const { error } = await db.from('profiles').update(patch).eq('user_id', targetId)
       if (error) return fail(req, 'update_failed', 500, error.message)
       await audit(db, ctx.userId, 'user.unban', 'user', targetId, { banned_at: target.banned_at }, patch)
+      return json(req, { ok: true })
+    }
+
+    // ── membership (0028) ────────────────────────────────────────────────
+    // The ONLY way anyone becomes a member until payments exist. Granting
+    // again EXTENDS from the current expiry (comp months stack); revoking
+    // expires the row now rather than deleting it, so history survives.
+    case 'grant_membership': {
+      if (!ctx.isAdmin) return fail(req, 'forbidden', 403)
+      const tier = body.tier
+      if (tier !== 'monthly' && tier !== 'annual') return fail(req, 'bad_request', 400)
+      const days = tier === 'annual' ? 365 : 30
+
+      const { data: existing } = await db
+        .from('memberships')
+        .select('tier, started_at, expires_at')
+        .eq('user_id', targetId)
+        .maybeSingle()
+      const now = Date.now()
+      const stillActive = existing && Date.parse(existing.expires_at) > now
+      const base = stillActive ? Date.parse(existing.expires_at) : now
+      const expiresAt = new Date(base + days * 86_400_000).toISOString()
+
+      const { error } = await db.from('memberships').upsert({
+        user_id: targetId,
+        tier,
+        started_at: stillActive ? existing.started_at : new Date(now).toISOString(),
+        expires_at: expiresAt,
+        granted_by: ctx.userId,
+        updated_at: new Date(now).toISOString(),
+      })
+      if (error) return fail(req, 'update_failed', 500, error.message)
+      await audit(db, ctx.userId, 'user.membership_granted', 'user', targetId,
+        existing ?? null, { tier, expires_at: expiresAt })
+      return json(req, { ok: true, tier, expires_at: expiresAt })
+    }
+    case 'revoke_membership': {
+      if (!ctx.isAdmin) return fail(req, 'forbidden', 403)
+      const { data: existing } = await db
+        .from('memberships')
+        .select('tier, expires_at')
+        .eq('user_id', targetId)
+        .maybeSingle()
+      if (!existing) return fail(req, 'not_found', 404)
+      const { error } = await db
+        .from('memberships')
+        .update({ expires_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('user_id', targetId)
+      if (error) return fail(req, 'update_failed', 500, error.message)
+      await audit(db, ctx.userId, 'user.membership_revoked', 'user', targetId, existing, null)
       return json(req, { ok: true })
     }
 
