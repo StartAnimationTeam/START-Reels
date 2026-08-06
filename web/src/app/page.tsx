@@ -56,7 +56,7 @@ export default async function HomePage({
       <div className="mt-6">
         {tab === 'popular' && <PopularTab anon={anon} featuredRest={featured.slice(1)} />}
         {tab === 'new' && <NewTab anon={anon} sub={sub === 'soon' ? 'soon' : 'live'} />}
-        {tab === 'rankings' && <RankingsTab anon={anon} />}
+        {tab === 'rankings' && <RankingsTab anon={anon} sub={sub === 'fresh' ? 'fresh' : 'trending'} />}
         {tab === 'categories' && <CategoriesTab anon={anon} />}
       </div>
     </div>
@@ -163,18 +163,18 @@ async function PopularTab({ anon, featuredRest }: { anon: Anon; featuredRest: Ca
   )
 }
 
+// The DramaBox sub-toggle, URL-borne like the tabs themselves
+// (?tab=new&sub=soon, ?tab=rankings&sub=fresh) — linkable, back-button-sane.
+const pill = (active: boolean) =>
+  `rounded-full px-4 py-1.5 text-sm transition-colors ${
+    active
+      ? 'font-medium text-white'
+      : 'border border-line text-ink-secondary hover:border-line-strong hover:text-ink'
+  }`
+const pillStyle = (active: boolean) => (active ? { background: 'var(--brand-gradient)' } : undefined)
+
 async function NewTab({ anon, sub }: { anon: Anon; sub: 'live' | 'soon' }) {
   const [recent, upcoming] = await Promise.all([newSeries(anon, 24), comingSoonSeries(anon)])
-
-  // The DramaBox sub-toggle: Live Now | Coming Soon, URL-borne like the
-  // tabs themselves (?tab=new&sub=soon) — linkable, back-button-sane.
-  const pill = (active: boolean) =>
-    `rounded-full px-4 py-1.5 text-sm transition-colors ${
-      active
-        ? 'font-medium text-white'
-        : 'border border-line text-ink-secondary hover:border-line-strong hover:text-ink'
-    }`
-  const pillStyle = (active: boolean) => (active ? { background: 'var(--brand-gradient)' } : undefined)
 
   return (
     <>
@@ -217,30 +217,34 @@ async function NewTab({ anon, sub }: { anon: Anon; sub: 'live' | 'soon' }) {
   )
 }
 
-async function RankingsTab({ anon }: { anon: Anon }) {
-  const [trending, fresh] = await Promise.all([trendingSeries(anon, 10), newSeries(anon, 10)])
+async function RankingsTab({ anon, sub }: { anon: Anon; sub: 'trending' | 'fresh' }) {
+  // One chart at a time behind the sub-toggle — fetch only the one on screen.
+  const rows = sub === 'trending' ? await trendingSeries(anon, 20) : await newSeries(anon, 20)
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h2 className="text-lg font-semibold tracking-tight">Most Trending</h2>
-      {trending.length === 0 ? (
-        <p className="mt-3 text-sm text-ink-muted">
-          Rankings appear once shows have been watched — the chart refreshes hourly.
+      <div className="mb-5 flex items-center gap-2">
+        <Link href="/?tab=rankings" className={pill(sub === 'trending')} style={pillStyle(sub === 'trending')}>
+          Most Trending
+        </Link>
+        <Link href="/?tab=rankings&sub=fresh" className={pill(sub === 'fresh')} style={pillStyle(sub === 'fresh')}>
+          New Releases
+        </Link>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="text-sm text-ink-muted">
+          {sub === 'trending'
+            ? 'Rankings appear once shows have been watched — the chart refreshes hourly.'
+            : 'Nothing published yet — check back soon.'}
         </p>
       ) : (
-        <ol className="mt-4 space-y-3">
-          {trending.map((s, i) => (
+        <ol className="space-y-3">
+          {rows.map((s, i) => (
             <RankRow key={s.id} series={s} rank={i + 1} />
           ))}
         </ol>
       )}
-
-      <h2 className="mt-10 text-lg font-semibold tracking-tight">New Releases</h2>
-      <ol className="mt-4 space-y-3">
-        {fresh.map((s, i) => (
-          <RankRow key={s.id} series={s} rank={i + 1} />
-        ))}
-      </ol>
     </div>
   )
 }
