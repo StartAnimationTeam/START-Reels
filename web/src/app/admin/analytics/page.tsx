@@ -199,6 +199,8 @@ export default async function AdminAnalyticsPage() {
     followsRecent,
     { data: claims },
     { data: adRewards },
+    { data: passInvoices },
+    membersNow,
   ] = await Promise.all([
     supabase
       .from('platform_daily_stats')
@@ -218,6 +220,12 @@ export default async function AdminAnalyticsPage() {
     supabase.from('daily_reward_claims').select('claim_date, streak_day').gte('claim_date', since),
     // Staff RLS; row count bounded by users × daily cap × 30 days.
     supabase.from('ad_reward_events').select('amount, user_id').gte('created_at', sinceIso),
+    // Membership revenue (0029/0030): every paid pass/renewal lands here.
+    supabase.from('payment_invoices').select('amount_centavos, tier, user_id').gte('created_at', sinceIso),
+    supabase
+      .from('memberships')
+      .select('*', { count: 'exact', head: true })
+      .gt('expires_at', new Date().toISOString()),
   ])
 
   const days = (daily ?? []) as unknown as DayRow[]
@@ -314,6 +322,12 @@ export default async function AdminAnalyticsPage() {
   const adCoins = adRows.reduce((sum, r) => sum + Number(r.amount), 0)
   const adWatchers = new Set(adRows.map((r) => r.user_id)).size
 
+  // ── membership revenue (30d): pesos in, buyers, live member count ──────
+  const passRows = (passInvoices ?? []) as Array<{ amount_centavos: number; tier: string; user_id: string }>
+  const passPesos = passRows.reduce((sum, r) => sum + Number(r.amount_centavos), 0) / 100
+  const passBuyers = new Set(passRows.map((r) => r.user_id)).size
+  const activeMembers = membersNow.count ?? 0
+
   const divergence =
     latest?.bunny_watch_seconds != null && Number(latest.watch_seconds) > 0
       ? Math.abs(Number(latest.watch_seconds) - Number(latest.bunny_watch_seconds)) / Number(latest.watch_seconds)
@@ -358,7 +372,16 @@ export default async function AdminAnalyticsPage() {
           </div>
 
           {/* ── economy tiles ────────────────────────────────────────────── */}
-          <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-5">
+          <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-6">
+            <StatTile
+              label="Membership revenue (30d)"
+              value={`₱${passPesos.toLocaleString()}`}
+              sub={
+                passRows.length > 0
+                  ? `${passRows.length} ${passRows.length === 1 ? 'payment' : 'payments'} from ${passBuyers} ${passBuyers === 1 ? 'buyer' : 'buyers'} · ${activeMembers} active ${activeMembers === 1 ? 'member' : 'members'}`
+                  : `no payments yet · ${activeMembers} active ${activeMembers === 1 ? 'member' : 'members'}`
+              }
+            />
             <StatTile label="Unlocks (30d)" value={String(totalUnlocks)} sub="paid + free-window entitlements" />
             <StatTile
               label="Coin economy (30d)"

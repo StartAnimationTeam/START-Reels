@@ -25,7 +25,7 @@ export function Nav() {
           {/* The real wordmark (Images/Logo, downsized into public/brand).
               Fixed height, intrinsic ratio — retina-sharp at 4x source. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/logo-horizontal.png" alt="START Reels" className="h-7 w-auto" />
+          <img src="/brand/logo-horizontal.png" alt="START Reels" className="h-5 w-auto" />
         </Link>
 
         {/* Search lives in the home screen's pill (owner call) — the top bar

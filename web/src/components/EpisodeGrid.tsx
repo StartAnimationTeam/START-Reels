@@ -18,12 +18,15 @@ export function EpisodeGrid({
   unlockedIds,
   currentId,
   lastWatched,
+  memberOpen = false,
 }: {
   episodes: EpisodeRow[]
   freeEpisodeCount: number
   unlockedIds: ReadonlySet<string>
   currentId?: string
   lastWatched?: number
+  /** Active members see NO locks — unlimited series IS the benefit (0028). */
+  memberOpen?: boolean
 }) {
   if (!episodes.length) {
     return <p className="text-sm text-ink-muted">Episodes are on their way — check back soon.</p>
@@ -33,7 +36,7 @@ export function EpisodeGrid({
     <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 md:grid-cols-10">
       {episodes.map((ep) => {
         const n = ep.episode_number ?? 0
-        const open = n <= freeEpisodeCount || unlockedIds.has(ep.id)
+        const open = memberOpen || n <= freeEpisodeCount || unlockedIds.has(ep.id)
         const current = ep.id === currentId
         const watched = lastWatched !== undefined && n <= lastWatched
 

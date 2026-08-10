@@ -14,7 +14,7 @@ export default function SignUpPage() {
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center gap-8 px-4 py-12">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/brand/logo-stack.png" alt="START Reels" className="h-20 w-auto" />
+      <img src="/brand/logo-stack.png" alt="START Reels" className="h-14 w-auto" />
       <SignUp />
     </div>
   )

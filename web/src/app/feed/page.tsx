@@ -62,9 +62,10 @@ export default async function FeedPage() {
   let unlockedIds = new Set<string>()
   let likedIds = new Set<string>()
   let followedIds = new Set<string>()
+  let isMember = false
   if (userId && ep1BySeries.size) {
     const ep1Ids = [...ep1BySeries.values()].map((e) => e.id)
-    const [{ data: ents }, { data: myLikes }, { data: myFollows }] = await Promise.all([
+    const [{ data: ents }, { data: myLikes }, { data: myFollows }, { data: membership }] = await Promise.all([
       supabase
         .from('video_entitlements')
         .select('video_id')
@@ -73,10 +74,12 @@ export default async function FeedPage() {
         .is('revoked_at', null),
       supabase.from('episode_likes').select('video_id').in('video_id', ep1Ids),
       supabase.from('series_follows').select('series_id').in('series_id', showIds),
+      supabase.from('memberships').select('expires_at').maybeSingle(),
     ])
     unlockedIds = new Set((ents ?? []).map((e) => e.video_id))
     likedIds = new Set((myLikes ?? []).map((l) => l.video_id))
     followedIds = new Set((myFollows ?? []).map((f) => f.series_id))
+    isMember = Boolean(membership && Date.parse(membership.expires_at) > Date.now())
   }
 
   // Fetch synopses in one read (CardSeries doesn't carry them).
@@ -99,7 +102,8 @@ export default async function FeedPage() {
         videoId: ep1?.id ?? null,
         thumbnailUrl: ep1?.thumbnail_url ?? null,
         coverUrl: show.cover_url,
-        open: Boolean(ep1) && (show.free_episode_count >= 1 || unlockedIds.has(ep1!.id)),
+        // Members ride every premiere free (0028) — the DB re-proves it.
+        open: Boolean(ep1) && (isMember || show.free_episode_count >= 1 || unlockedIds.has(ep1!.id)),
         likeCount: Number(ep1?.like_count ?? 0),
         liked: ep1 ? likedIds.has(ep1.id) : false,
         followed: followedIds.has(show.id),

@@ -75,9 +75,10 @@ export default async function SeriesPage({
   let unlockedIds = new Set<string>()
   let progress: SeriesProgressRow | null = null
   let followed = false
+  let isMember = false
   if (userId && episodes.length) {
     const now = new Date().toISOString()
-    const [entRes, progRes, followedRes] = await Promise.all([
+    const [entRes, progRes, followedRes, memberRes] = await Promise.all([
       supabase
         .from('video_entitlements')
         .select('video_id, expires_at, revoked_at')
@@ -90,10 +91,12 @@ export default async function SeriesPage({
         .eq('series_id', series.id)
         .maybeSingle(),
       isFollowed(supabase, series.id),
+      supabase.from('memberships').select('expires_at').maybeSingle(),
     ])
     unlockedIds = new Set((entRes.data ?? []).map((e) => e.video_id))
     progress = (progRes.data ?? null) as SeriesProgressRow | null
     followed = followedRes
+    isMember = Boolean(memberRes.data && Date.parse(memberRes.data.expires_at) > Date.now())
   }
 
   // Continue at the furthest episode; a finished furthest episode advances
@@ -208,6 +211,7 @@ export default async function SeriesPage({
               freeEpisodeCount={series.free_episode_count}
               unlockedIds={unlockedIds}
               lastWatched={progress?.last_episode_number}
+              memberOpen={isMember}
             />
           </div>
         </>

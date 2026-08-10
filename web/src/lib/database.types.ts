@@ -144,6 +144,37 @@ export interface Database {
         Update: never
         Relationships: []
       }
+      payment_subscriptions: {
+        // Column-grant allowlist (0029): clients can select ONLY these —
+        // provider ids never reach the browser, so the Row omits them.
+        Row: {
+          user_id: string
+          tier: 'weekly' | 'monthly' | 'annual'
+          status: 'pending' | 'incomplete' | 'incomplete_cancelled' | 'active' | 'past_due' | 'unpaid' | 'cancelled'
+          current_period_end: string | null
+          cancelled_at: string | null
+          created_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      payment_invoices: {
+        // Staff-select only (analytics revenue tile).
+        Row: {
+          provider_invoice_id: string
+          subscription_id: string | null
+          user_id: string
+          tier: string
+          amount_centavos: number
+          days_granted: number
+          paid_at: string | null
+          created_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       memberships: {
         Row: {
           user_id: string
