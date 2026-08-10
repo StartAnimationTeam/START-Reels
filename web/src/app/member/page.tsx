@@ -111,7 +111,12 @@ export default async function MemberPage({
       )}
 
       {userId && passesEnabled ? (
-        <PassCards prices={prices} methods={methods} isMember={Boolean(membership)} />
+        <PassCards
+          prices={prices}
+          methods={methods}
+          isMember={Boolean(membership)}
+          currentExpiresAt={membership?.expires_at ?? null}
+        />
       ) : !userId ? (
         /* Signed-out: settings are RLS-gated, so no prices here — the
            preview names the passes and the CTA is the signup. */

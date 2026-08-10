@@ -23,14 +23,19 @@ const TIERS = [
   { tier: 'annual' as const, days: 365, blurb: '365 days — the best value' },
 ]
 
+/** sessionStorage key: the expiry BEFORE checkout — the honest baseline. */
+const BASELINE_KEY = 'pm_pass_baseline'
+
 export function PassCards({
   prices,
   methods,
   isMember,
+  currentExpiresAt,
 }: {
   prices: Record<string, number>
   methods: string[]
   isMember: boolean
+  currentExpiresAt: string | null
 }) {
   const api = useApi()
   const [busy, setBusy] = useState<string | null>(null)
@@ -40,6 +45,11 @@ export function PassCards({
     setBusy(tier)
     setError(null)
     try {
+      // Snapshot the pre-payment expiry NOW: the webhook can land before
+      // the redirect returns, so a baseline captured on the return page
+      // would already include the grant and the confirm poller could
+      // never see the change.
+      sessionStorage.setItem(BASELINE_KEY, currentExpiresAt ?? '0')
       const { checkoutUrl } = await api.buyMembershipPass(tier)
       window.location.href = checkoutUrl // hosted checkout owns the rest
     } catch (err) {
@@ -95,9 +105,11 @@ export function PassCards({
 
 /**
  * The return leg: PayMongo redirected back with ?paid=1. The webhook may
- * land seconds later — poll the (RLS-scoped, own-row) membership until
- * expires_at moves past the value the server rendered with, then refresh
- * so the page re-renders as a member. Honest timeout if it drags.
+ * land seconds later — or may have ALREADY landed before the redirect —
+ * so the baseline is the sessionStorage snapshot taken when checkout
+ * STARTED, not anything rendered after payment. Poll the (RLS-scoped,
+ * own-row) membership until expires_at moves past that snapshot, then
+ * refresh. Honest timeout if it drags.
  */
 export function PassConfirm({ baselineExpiresAt }: { baselineExpiresAt: string | null }) {
   const supabase = useSupabase()
@@ -107,23 +119,35 @@ export function PassConfirm({ baselineExpiresAt }: { baselineExpiresAt: string |
 
   useEffect(() => {
     if (!supabase) return
-    const baseline = baselineExpiresAt ? Date.parse(baselineExpiresAt) : 0
-    const timer = setInterval(async () => {
+    // Pre-checkout snapshot first; the server-rendered value only as a
+    // fallback (e.g. the user opened ?paid=1 in a fresh tab).
+    const stored = sessionStorage.getItem(BASELINE_KEY)
+    const baseline = stored !== null
+      ? (stored === '0' ? 0 : Date.parse(stored))
+      : baselineExpiresAt ? Date.parse(baselineExpiresAt) : 0
+
+    let timer: ReturnType<typeof setInterval> | null = null
+    const check = async () => {
       tries.current += 1
       const { data } = await supabase.from('memberships').select('expires_at').maybeSingle()
       const current = data ? Date.parse(data.expires_at) : 0
       if (current > baseline && current > Date.now()) {
-        clearInterval(timer)
+        if (timer) clearInterval(timer)
+        sessionStorage.removeItem(BASELINE_KEY)
         setState('done')
         router.refresh()
         return
       }
-      if (tries.current >= 20) {
+      if (tries.current >= 20 && timer) {
         clearInterval(timer)
         setState('slow')
       }
-    }, 3000)
-    return () => clearInterval(timer)
+    }
+    void check() // the webhook often wins the race — resolve immediately
+    timer = setInterval(check, 3000)
+    return () => {
+      if (timer) clearInterval(timer)
+    }
   }, [supabase, baselineExpiresAt, router])
 
   if (state === 'done') return null
