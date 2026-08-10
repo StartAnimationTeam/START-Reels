@@ -229,7 +229,24 @@ try {
       h.check('an unknown subscription → 200, no crash', ghost.status === 200, `HTTP ${ghost.status}`)
     }
 
-    h.section('§3 membership passes: checkout_session.payment.paid (0030)')
+    h.section('§3 the webhook actually points at US (shared-org hazard)')
+    {
+      const auth = 'Basic ' + Buffer.from(`${env.PAYMONGO_SECRET_KEY}:`).toString('base64')
+      const res = await fetch('https://api.paymongo.com/v1/webhooks', { headers: { Authorization: auth } })
+      const body = await res.json().catch(() => null)
+      const ours = (body?.data ?? []).find((w) => w.attributes?.url === HOOK)
+      // 2026-08-10: another team on this PayMongo org repointed our webhook
+      // at their server. Payments succeeded, memberships never granted, and
+      // nothing in our logs said why. This assertion is that day's scar.
+      h.check('a webhook is registered to OUR endpoint', Boolean(ours),
+        `registered: ${(body?.data ?? []).map((w) => w.attributes?.url).join(', ') || 'none'}`)
+      h.check('…and it is enabled', ours?.attributes?.status === 'enabled', ours?.attributes?.status)
+      h.check('…and subscribes to checkout_session.payment.paid',
+        (ours?.attributes?.events ?? []).includes('checkout_session.payment.paid'),
+        JSON.stringify(ours?.attributes?.events))
+    }
+
+    h.section('§4 membership passes: checkout_session.payment.paid (0030)')
     {
       const before = await expiry()
       const session = {

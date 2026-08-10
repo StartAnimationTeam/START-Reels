@@ -142,8 +142,21 @@ const EVENTS = [
 const hooks = await pm(API_BASE, '/webhooks')
 const existingHook = (hooks?.data ?? []).find((h) => h.attributes?.url === hookUrl)
 
-if (existingHook) {
-  console.log(`\n  webhook already registered: ${existingHook.id} → ${hookUrl}`)
+// HAZARD, learned live 2026-08-10: this PayMongo organization is SHARED
+// with another team. Our webhook (hook_xtg2Yc…) was silently repointed at
+// their server, so every payment event went to them and no membership was
+// granted — the payment succeeded and the platform looked broken. So the
+// check is "is OUR url registered anywhere", and a hook whose id we own but
+// whose url drifted gets corrected rather than duplicated.
+const ourHook = (hooks?.data ?? []).find((h) => h.attributes?.url === hookUrl)
+const strays = (hooks?.data ?? []).filter((h) => h.attributes?.url !== hookUrl)
+if (strays.length) {
+  console.log('\n  NOTE: other webhooks exist on this PayMongo org (shared account):')
+  for (const s of strays) console.log(`    ${s.id} → ${s.attributes.url}`)
+}
+
+if (existingHook || ourHook) {
+  console.log(`\n  webhook already registered: ${(existingHook ?? ourHook).id} → ${hookUrl}`)
   console.log('  (its secret was shown when first created; find it via GET /v1/webhooks/{id} if lost)')
 } else {
   const created = await pm(API_BASE, '/webhooks', {
