@@ -25,8 +25,8 @@ export const metadata: Metadata = { title: 'Membership' }
  */
 
 const BENEFITS = [
-  { icon: '▶', title: 'Unlimited series', detail: 'Every episode, no coin unlocks' },
-  { icon: '✦', title: 'Members-only dramas', detail: 'Exclusive premieres for members' },
+  { icon: '▶', title: 'Unlimited series', detail: 'Watch every coin-locked episode free while your membership is active' },
+  { icon: '✦', title: 'Members-only dramas', detail: 'Exclusive premieres only members can play' },
   { icon: '⚡', title: 'Daily member points', detail: 'Bonus rewards on top of check-ins' },
   { icon: 'HD', title: '1080p quality', detail: 'Full HD on every device' },
 ]
@@ -151,6 +151,29 @@ export default async function MemberPage({
           </p>
         )
       )}
+
+      {/* ── the two ways to watch, categorized (owner call) ─────────────── */}
+      <section className="mt-8">
+        <h2 className="text-sm font-medium text-ink-secondary">Coins vs Membership</h2>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl border border-line bg-surface p-5">
+            <p className="text-sm font-semibold text-ink">🪙 Coins — own it</p>
+            <ul className="mt-2 space-y-1.5 text-xs text-ink-muted">
+              <li>Unlock coin-locked episodes one by one</li>
+              <li>An unlock is saved to your account — yours forever</li>
+              <li>Earn coins free: daily check-ins and watching ads</li>
+            </ul>
+          </div>
+          <div className="rounded-2xl border border-line bg-surface p-5">
+            <p className="text-sm font-semibold text-ink">✦ Membership — watch it all</p>
+            <ul className="mt-2 space-y-1.5 text-xs text-ink-muted">
+              <li>Every coin-locked episode plays free, no unlocking</li>
+              <li>Members-only dramas open up</li>
+              <li>Access lasts while the membership is active — coins you spent stay yours</li>
+            </ul>
+          </div>
+        </div>
+      </section>
 
       <section className="mt-8">
         <h2 className="text-sm font-medium text-ink-secondary">

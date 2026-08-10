@@ -408,6 +408,13 @@ export function WatchExperience({
                         {unlockBusy ? 'Unlocking…' : `Unlock for ${creditLabel(lockedEpisodeCost)}`}
                       </button>
                     )}
+                    {/* The two-currency contract at the moment of decision. */}
+                    <p className="mt-3 text-[11px] text-white/60">
+                      A coin unlock is yours forever ·{' '}
+                      <Link href="/member" className="pointer-events-auto underline decoration-white/30 underline-offset-2">
+                        members watch everything free
+                      </Link>
+                    </p>
                   </div>
                 ) : state.kind === 'error' ? (
                   <div className="animate-scale-in max-w-xs px-6 text-center">

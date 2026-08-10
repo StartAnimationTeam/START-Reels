@@ -52,6 +52,11 @@ export default async function WalletPage() {
         <p className="text-3xl font-semibold" style={{ color: 'var(--brand-bright)' }}>
           {creditLabel(available)}
         </p>
+        {/* The two-currency contract, stated where coins live: coin unlocks
+            are BOUGHT (permanent); membership access RENTS (0031). */}
+        <p className="mt-1 text-xs text-ink-muted">
+          Coins unlock episodes permanently — an unlock is yours to keep, even if a membership ends.
+        </p>
         {holds < 0 && (
           <p className="mt-1 text-xs text-ink-muted">{creditLabel(holds)} on hold for episodes you have open</p>
         )}
