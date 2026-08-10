@@ -94,6 +94,36 @@ Deno.serve(async (req) => {
 
   try {
     switch (eventType) {
+      // ── membership passes: one-time hosted checkout (0030) ────────────
+      case 'checkout_session.payment.paid': {
+        const attrs = resource?.attributes ?? {}
+        const meta = attrs.metadata ?? {}
+        const userId = typeof meta.user_id === 'string' ? meta.user_id : null
+        const tier = typeof meta.tier === 'string' ? meta.tier : null
+        if (!userId || !tier) {
+          // A session we didn't mint (console test, other tooling) — a
+          // valid signature deserves a 200, not a retry storm.
+          console.warn('checkout_session.payment.paid without our metadata', JSON.stringify(meta))
+          break
+        }
+        // The SESSION id is the idempotency key: one session = one pass,
+        // however many payment retries or webhook deliveries it took.
+        const sessionId = resource?.id ?? null
+        if (!sessionId) break
+        const payments = Array.isArray(attrs.payments) ? attrs.payments : []
+        const amount = Number(payments[0]?.attributes?.amount ?? attrs.line_items?.[0]?.amount ?? 0) || 0
+        const { error } = await db.rpc('apply_subscription_payment', {
+          p_user_id: userId,
+          p_tier: tier,
+          p_provider_subscription_id: null,
+          p_provider_invoice_id: sessionId,
+          p_amount_centavos: amount,
+          p_paid_at: new Date().toISOString(),
+        })
+        if (error) throw new Error(`apply_subscription_payment(pass): ${error.message}`)
+        break
+      }
+
       case 'subscription.invoice.paid': {
         const inv = invoiceFields(resource)
         if (!inv.invoiceId || !inv.subscriptionId) {

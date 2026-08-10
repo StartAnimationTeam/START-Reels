@@ -228,6 +228,51 @@ try {
       const ghost = await post(body, sign(body))
       h.check('an unknown subscription → 200, no crash', ghost.status === 200, `HTTP ${ghost.status}`)
     }
+
+    h.section('§3 membership passes: checkout_session.payment.paid (0030)')
+    {
+      const before = await expiry()
+      const session = {
+        id: `cs_test_${RUN}`,
+        attributes: {
+          metadata: { user_id: USER, tier: 'weekly', app: 'start-reels', kind: 'membership_pass' },
+          payments: [{ id: `pay_${RUN}`, attributes: { amount: 4900, status: 'paid' } }],
+        },
+      }
+      const body = makeEvent(`evt_pmtest_${RUN}_pass`, 'checkout_session.payment.paid', session)
+      const ok = await post(body, sign(body))
+      h.check('a signed pass payment is 200', ok.status === 200, `HTTP ${ok.status}: ${JSON.stringify(ok.data)}`)
+      const after = await expiry()
+      h.check('…and extends the membership by 7 days (weekly pass)',
+        Math.round((Date.parse(after) - Date.parse(before)) / 86_400_000) === 7,
+        `delta ${(Date.parse(after) - Date.parse(before)) / 86_400_000}`)
+
+      const invoice = await sql(`
+        select amount_centavos, tier from public.payment_invoices
+        where provider_invoice_id = 'cs_test_${RUN}'
+      `)
+      h.check('the session lands in payment_invoices (revenue record)',
+        invoice[0]?.amount_centavos === 4900 && invoice[0]?.tier === 'weekly', JSON.stringify(invoice[0]))
+
+      const replay = await post(body, sign(body))
+      h.check('an exact replay → 200 {replay}', replay.status === 200 && replay.data?.replay === true,
+        JSON.stringify(replay.data))
+      h.check('…expiry unchanged (claim layer)', (await expiry()) === after)
+
+      const body2 = makeEvent(`evt_pmtest_${RUN}_pass2`, 'checkout_session.payment.paid', session)
+      const redelivery = await post(body2, sign(body2))
+      h.check('the same SESSION under a new event id → 200', redelivery.status === 200, `HTTP ${redelivery.status}`)
+      h.check('…expiry STILL unchanged (session-id invoice layer)', (await expiry()) === after)
+
+      const orphan = {
+        id: `cs_orphan_${RUN}`,
+        attributes: { metadata: {}, payments: [] },
+      }
+      const body3 = makeEvent(`evt_pmtest_${RUN}_orphan`, 'checkout_session.payment.paid', orphan)
+      const skipped = await post(body3, sign(body3))
+      h.check('a session without our metadata → 200, no grant', skipped.status === 200, `HTTP ${skipped.status}`)
+      h.check('…and expiry untouched by the orphan', (await expiry()) === after)
+    }
   }
 } finally {
   console.log('\nCleaning up...')

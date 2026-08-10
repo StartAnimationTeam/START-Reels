@@ -117,6 +117,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   category_exists: 'A category with that name already exists.',
   banner_required: 'Featuring needs a wide banner first — upload one in Curation.',
   members_only: 'This drama is for members only.',
+  passes_disabled: 'Membership passes are paused right now.',
+  paymongo_not_configured: 'Payments aren’t switched on yet — check back soon.',
+  payment_failed: 'The payment couldn’t start. Nothing was charged — try again in a moment.',
   ad_rewards_disabled: 'Ad rewards are paused right now.',
   ad_reward_cap_reached: 'You’ve hit today’s ad limit — come back tomorrow.',
   ad_reward_too_soon: 'One at a time — give it a few seconds and try again.',
@@ -163,6 +166,12 @@ export function creditLabel(amount: number): string {
   const n = Math.abs(amount)
   const rounded = Number.isInteger(n) ? n : Math.round(n * 100) / 100
   return `${rounded} ${rounded === 1 ? 'coin' : 'coins'}`
+}
+
+/** "₱149" — pass prices arrive in centavos; whole pesos on screen. */
+export function pesoLabel(centavos: number): string {
+  const pesos = centavos / 100
+  return `₱${Number.isInteger(pesos) ? pesos : pesos.toFixed(2)}`
 }
 
 export function tierCostLabel(tier: string, cost: number): string {

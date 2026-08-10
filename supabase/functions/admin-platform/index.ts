@@ -55,6 +55,18 @@ const SETTING_RULES: Record<string, (v: unknown) => boolean> = {
   ad_reward_amount: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 100,
   ad_reward_daily_cap: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 100,
   ad_reward_min_interval_seconds: (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 3600,
+  // Membership passes (0030). Prices in centavos, ₱1–₱100k per tier;
+  // methods limited to what PayMongo checkout actually accepts here.
+  membership_passes_enabled: (v) => typeof v === 'boolean',
+  membership_pass_prices: (v) =>
+    typeof v === 'object' && v !== null && !Array.isArray(v) &&
+    ['weekly', 'monthly', 'annual'].every((t) => {
+      const n = (v as Record<string, unknown>)[t]
+      return Number.isInteger(n) && (n as number) >= 100 && (n as number) <= 10_000_000
+    }),
+  membership_pass_methods: (v) =>
+    Array.isArray(v) && v.length >= 1 &&
+    v.every((m) => ['qrph', 'gcash', 'paymaya', 'card'].includes(m as string)),
 }
 
 interface Body {

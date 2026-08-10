@@ -80,6 +80,10 @@ export function useApi() {
     // load, making event double-fires and fetch retries idempotent. The
     // server owns every real rule (caps, intervals, amounts).
     claimAdReward: (claimToken: string) => call<AdClaimResult>('ads-claim', { claimToken }),
+    // Membership pass: mints a PayMongo hosted-checkout session; the GRANT
+    // arrives via webhook, never from the browser.
+    buyMembershipPass: (tier: 'weekly' | 'monthly' | 'annual') =>
+      call<{ checkoutUrl: string; sessionId: string; amount: number }>('membership-checkout', { tier }),
 
     heartbeat: (sessionId: string, seconds: number, position: number, ended = false) =>
       call<{ credited: number; settled: boolean }>('watch-heartbeat', {

@@ -57,11 +57,16 @@ async function pm(base, path, init = {}) {
 
 console.log(`\nPayMongo bootstrap — ${MODE.toUpperCase()} mode\n`)
 
-// ── plans ─────────────────────────────────────────────────────────────────
+// ── plans (SUBSCRIPTIONS — org-gated) ────────────────────────────────────
+// Plan creation 403s until PayMongo approves subscription payment methods
+// (cards/Maya) for the organization. That must NOT block the webhook
+// registration below — membership PASSES (one-time checkout) work without
+// any of it.
 const settingRows = await sql(`select value from public.platform_settings where key = 'paymongo_plans'`)
 const stored = settingRows[0]?.value ?? {}
 const branch = stored[MODE] ?? {}
 
+let plansBlocked = false
 for (const [tier, cfg] of Object.entries(PRICES)) {
   const existing = branch[tier]
   if (existing?.planId) {
@@ -77,25 +82,38 @@ for (const [tier, cfg] of Object.entries(PRICES)) {
       console.log(`  stored ${tier} plan ${existing.planId} not found remotely — re-creating.`)
     }
   }
-  const created = await pm(SUBS_BASE, '/subscriptions/plans', {
-    method: 'POST',
-    body: JSON.stringify({
-      data: {
-        attributes: {
-          name: cfg.name,
-          description: `${cfg.name} — unlimited episodes while active.`,
-          amount: cfg.amount,
-          currency: 'PHP',
-          interval: cfg.interval,
-          interval_count: 1,
-          plan_type: 'scheduled',
-          metadata: { tier, app: 'start-reels' },
+  try {
+    const created = await pm(SUBS_BASE, '/subscriptions/plans', {
+      method: 'POST',
+      body: JSON.stringify({
+        data: {
+          attributes: {
+            name: cfg.name,
+            description: `${cfg.name} — unlimited episodes while active.`,
+            amount: cfg.amount,
+            currency: 'PHP',
+            interval: cfg.interval,
+            interval_count: 1,
+            plan_type: 'scheduled',
+            metadata: { tier, app: 'start-reels' },
+          },
         },
-      },
-    }),
-  })
-  branch[tier] = { planId: created.data.id, amountCentavos: cfg.amount }
-  console.log(`  create ${tier}: ${created.data.id} (₱${cfg.amount / 100})`)
+      }),
+    })
+    branch[tier] = { planId: created.data.id, amountCentavos: cfg.amount }
+    console.log(`  create ${tier}: ${created.data.id} (₱${cfg.amount / 100})`)
+  } catch (err) {
+    if (String(err.message).includes('payment_method_not_configured')) {
+      plansBlocked = true
+      console.log(`  skip   ${tier}: subscriptions still org-blocked (payment_method_not_configured)`)
+      continue
+    }
+    throw err
+  }
+}
+if (plansBlocked) {
+  console.log('\n  Subscription plans remain blocked until PayMongo approves cards/Maya')
+  console.log('  for the org — re-run this script once they do. Passes are unaffected.')
 }
 
 stored[MODE] = branch
@@ -110,6 +128,9 @@ console.log('\n  platform_settings.paymongo_plans updated.')
 // ── webhook ───────────────────────────────────────────────────────────────
 const hookUrl = `${env.SUPABASE_URL}/functions/v1/paymongo-webhook`
 const EVENTS = [
+  // membership passes (one-time hosted checkout — live TODAY via QRPh)
+  'checkout_session.payment.paid',
+  // subscriptions (armed for when the org approvals land)
   'subscription.activated',
   'subscription.past_due',
   'subscription.unpaid',

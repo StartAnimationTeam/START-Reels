@@ -76,3 +76,6 @@ verify_jwt = false
 
 [functions.subscriptions-manage]
 verify_jwt = false
+
+[functions.membership-checkout]
+verify_jwt = false

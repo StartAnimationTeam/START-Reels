@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
+import { PassCards, PassConfirm } from './PassCards'
 import { SeriesRail } from '@/components/SeriesRail'
 import { currentUser } from '@/lib/auth'
 import { MEMBER_TIER_LABELS, MEMBERSHIP_COMING_SOON } from '@/lib/labels'
@@ -9,13 +11,17 @@ import type { CardSeries } from '@/lib/catalog'
 export const metadata: Metadata = { title: 'Membership' }
 
 /**
- * Membership is REAL machinery since 0028 — members unlock every episode
- * free and members-only dramas play for them alone. What doesn't exist yet
- * is self-serve purchase (that's the payments phase), so:
+ * Membership machinery is live (0028) and PASSES are purchasable (0030):
+ * one QRPh/GCash/Maya/card payment buys 7/30/365 days on the memberships
+ * row. No auto-renew — QRPh cannot recur, and the cards say so. The
+ * SUBSCRIPTION rail (0029) stays dormant until PayMongo approves the
+ * org's recurring methods.
  *
- *   active member  → status card: tier, benefits in force, renewal date
- *   everyone else  → the tier preview with an honest "buying opens soon"
- *                    banner (trap #15 — no dead Join button)
+ * States, all honest (trap #15):
+ *   member    → status card (+ "add more time" cards — passes stack)
+ *   signed-in → pass cards with real prices
+ *   signed-out→ pass prices + sign-up CTA
+ *   passes off→ the classic "coming soon" banner
  */
 
 const BENEFITS = [
@@ -25,7 +31,12 @@ const BENEFITS = [
   { icon: 'HD', title: '1080p quality', detail: 'Full HD on every device' },
 ]
 
-export default async function MemberPage() {
+export default async function MemberPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ paid?: string }>
+}) {
+  const { paid } = await searchParams
   const anon = createAnonSupabase()
   const userId = await currentUser()
 
@@ -39,22 +50,34 @@ export default async function MemberPage() {
     if (data && Date.parse(data.expires_at) > Date.now()) membership = data
   }
 
-  const { data } = await anon
-    .from('series')
-    .select('id, slug, title, cover_url, free_episode_count, episode_credit_cost, is_members_only, total_episodes')
-    .eq('status', 'published')
-    .is('deleted_at', null)
-    .eq('is_members_only', true)
-    .order('published_at', { ascending: false })
-    .limit(12)
-  const vipShelf = (data ?? []) as CardSeries[]
+  const [{ data: vip }, { data: settings }] = await Promise.all([
+    anon
+      .from('series')
+      .select('id, slug, title, cover_url, free_episode_count, episode_credit_cost, is_members_only, total_episodes')
+      .eq('status', 'published')
+      .is('deleted_at', null)
+      .eq('is_members_only', true)
+      .order('published_at', { ascending: false })
+      .limit(12),
+    anon
+      .from('platform_settings')
+      .select('key, value')
+      .in('key', ['membership_passes_enabled', 'membership_pass_prices', 'membership_pass_methods']),
+  ])
+  const vipShelf = (vip ?? []) as CardSeries[]
+  const setting = (k: string) => settings?.find((s) => s.key === k)?.value
+  const passesEnabled = setting('membership_passes_enabled') === true
+  const prices = (setting('membership_pass_prices') ?? {}) as Record<string, number>
+  const methods = ((setting('membership_pass_methods') ?? ['qrph']) as string[]).map(String)
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-24 pt-10 sm:px-6">
       <h1 className="text-2xl font-semibold tracking-tight">Membership</h1>
 
-      {membership ? (
-        /* ── the member's own card ──────────────────────────────────────── */
+      {/* the return leg from PayMongo checkout — webhook truth, polled */}
+      {paid === '1' && userId && <PassConfirm baselineExpiresAt={membership?.expires_at ?? null} />}
+
+      {membership && (
         <div
           className="mt-4 rounded-2xl border p-5"
           style={{ borderColor: 'var(--brand)', background: 'var(--surface-brand)' }}
@@ -77,28 +100,50 @@ export default async function MemberPage() {
             })}
           </p>
         </div>
+      )}
+
+      {passesEnabled ? (
+        userId ? (
+          <PassCards prices={prices} methods={methods} isMember={Boolean(membership)} />
+        ) : (
+          <section className="mt-6">
+            <h2 className="text-sm font-medium text-ink-secondary">Get a membership pass</h2>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              {(['weekly', 'monthly', 'annual'] as const).map((tier) => {
+                const amount = Number(prices[tier] ?? 0)
+                if (amount < 100) return null
+                return (
+                  <div key={tier} className="rounded-2xl border border-line bg-surface p-5">
+                    <h3 className="font-semibold">{MEMBER_TIER_LABELS[tier]}</h3>
+                    <p className="mt-1 text-2xl font-semibold brand-gradient-text">
+                      ₱{Math.round(amount / 100)}
+                    </p>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      {tier === 'weekly' ? '7 days' : tier === 'monthly' ? '30 days' : '365 days'} of
+                      unlimited episodes
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+            <Link
+              href="/sign-up"
+              className="mt-4 inline-block w-full rounded-lg px-6 py-2.5 text-center text-sm font-medium text-white shadow-[var(--shadow-brand)]"
+              style={{ background: 'var(--brand-gradient)' }}
+            >
+              Sign up free to get a pass
+            </Link>
+          </section>
+        )
       ) : (
-        <>
-          {/* The honest banner comes FIRST — everything below is a preview. */}
+        !membership && (
           <p
             className="mt-4 rounded-xl border px-4 py-3 text-sm"
             style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
           >
             {MEMBERSHIP_COMING_SOON}
           </p>
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            {(['monthly', 'annual'] as const).map((tier) => (
-              <div key={tier} className="rounded-2xl border border-line bg-surface p-5">
-                <h2 className="font-semibold">{MEMBER_TIER_LABELS[tier]}</h2>
-                <p className="mt-1 text-2xl font-semibold brand-gradient-text">Coming soon</p>
-                <p className="mt-1 text-xs text-ink-muted">
-                  {tier === 'monthly' ? 'A month of unlimited bingeing' : 'The best value for regulars'}
-                </p>
-              </div>
-            ))}
-          </div>
-        </>
+        )
       )}
 
       <section className="mt-8">
