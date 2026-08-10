@@ -40,17 +40,22 @@ export default async function MemberPage({
   const anon = createAnonSupabase()
   const userId = await currentUser()
 
+  // platform_settings RLS requires a signed-in reader (0003) — the anon
+  // client gets [] and would silently render "coming soon" forever. Settings
+  // ride the user-scoped client; signed-out visitors get the honest
+  // no-prices preview below instead.
+  const userDb = userId ? await createServerSupabase() : null
+
   let membership: { tier: string; expires_at: string } | null = null
-  if (userId) {
-    const supabase = await createServerSupabase()
-    const { data } = await supabase
+  if (userDb) {
+    const { data } = await userDb
       .from('memberships')
       .select('tier, expires_at')
       .maybeSingle()
     if (data && Date.parse(data.expires_at) > Date.now()) membership = data
   }
 
-  const [{ data: vip }, { data: settings }] = await Promise.all([
+  const [{ data: vip }, settingsRes] = await Promise.all([
     anon
       .from('series')
       .select('id, slug, title, cover_url, free_episode_count, episode_credit_cost, is_members_only, total_episodes')
@@ -59,11 +64,14 @@ export default async function MemberPage({
       .eq('is_members_only', true)
       .order('published_at', { ascending: false })
       .limit(12),
-    anon
-      .from('platform_settings')
-      .select('key, value')
-      .in('key', ['membership_passes_enabled', 'membership_pass_prices', 'membership_pass_methods']),
+    userDb
+      ? userDb
+          .from('platform_settings')
+          .select('key, value')
+          .in('key', ['membership_passes_enabled', 'membership_pass_prices', 'membership_pass_methods'])
+      : Promise.resolve({ data: null }),
   ])
+  const settings = settingsRes.data
   const vipShelf = (vip ?? []) as CardSeries[]
   const setting = (k: string) => settings?.find((s) => s.key === k)?.value
   const passesEnabled = setting('membership_passes_enabled') === true
@@ -102,39 +110,32 @@ export default async function MemberPage({
         </div>
       )}
 
-      {passesEnabled ? (
-        userId ? (
-          <PassCards prices={prices} methods={methods} isMember={Boolean(membership)} />
-        ) : (
-          <section className="mt-6">
-            <h2 className="text-sm font-medium text-ink-secondary">Get a membership pass</h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              {(['weekly', 'monthly', 'annual'] as const).map((tier) => {
-                const amount = Number(prices[tier] ?? 0)
-                if (amount < 100) return null
-                return (
-                  <div key={tier} className="rounded-2xl border border-line bg-surface p-5">
-                    <h3 className="font-semibold">{MEMBER_TIER_LABELS[tier]}</h3>
-                    <p className="mt-1 text-2xl font-semibold brand-gradient-text">
-                      ₱{Math.round(amount / 100)}
-                    </p>
-                    <p className="mt-1 text-xs text-ink-muted">
-                      {tier === 'weekly' ? '7 days' : tier === 'monthly' ? '30 days' : '365 days'} of
-                      unlimited episodes
-                    </p>
-                  </div>
-                )
-              })}
-            </div>
-            <Link
-              href="/sign-up"
-              className="mt-4 inline-block w-full rounded-lg px-6 py-2.5 text-center text-sm font-medium text-white shadow-[var(--shadow-brand)]"
-              style={{ background: 'var(--brand-gradient)' }}
-            >
-              Sign up free to get a pass
-            </Link>
-          </section>
-        )
+      {userId && passesEnabled ? (
+        <PassCards prices={prices} methods={methods} isMember={Boolean(membership)} />
+      ) : !userId ? (
+        /* Signed-out: settings are RLS-gated, so no prices here — the
+           preview names the passes and the CTA is the signup. */
+        <section className="mt-6">
+          <h2 className="text-sm font-medium text-ink-secondary">Membership passes</h2>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {(['weekly', 'monthly', 'annual'] as const).map((tier) => (
+              <div key={tier} className="rounded-2xl border border-line bg-surface p-5">
+                <h3 className="font-semibold">{MEMBER_TIER_LABELS[tier]}</h3>
+                <p className="mt-1 text-xs text-ink-muted">
+                  {tier === 'weekly' ? '7 days' : tier === 'monthly' ? '30 days' : '365 days'} of
+                  unlimited episodes — one payment, no auto-renew.
+                </p>
+              </div>
+            ))}
+          </div>
+          <Link
+            href="/sign-up"
+            className="mt-4 inline-block w-full rounded-lg px-6 py-2.5 text-center text-sm font-medium text-white shadow-[var(--shadow-brand)]"
+            style={{ background: 'var(--brand-gradient)' }}
+          >
+            Sign up free to see prices
+          </Link>
+        </section>
       ) : (
         !membership && (
           <p
