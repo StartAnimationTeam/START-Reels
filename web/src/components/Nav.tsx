@@ -21,14 +21,11 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-background/85 backdrop-blur-md">
       <nav className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <span
-            aria-hidden
-            className="h-5 w-5 rounded-full"
-            style={{ background: 'var(--brand-gradient)' }}
-          />
-          <span>START</span>
-          <span className="brand-gradient-text">Reels</span>
+        <Link href="/" className="flex items-center">
+          {/* The real wordmark (Images/Logo, downsized into public/brand).
+              Fixed height, intrinsic ratio — retina-sharp at 4x source. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/logo-horizontal.png" alt="START Reels" className="h-7 w-auto" />
         </Link>
 
         {/* Search lives in the home screen's pill (owner call) — the top bar
