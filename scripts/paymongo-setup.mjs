@@ -66,7 +66,7 @@ for (const [tier, cfg] of Object.entries(PRICES)) {
   const existing = branch[tier]
   if (existing?.planId) {
     try {
-      const remote = await pm(SUBS_BASE, `/plans/${existing.planId}`)
+      const remote = await pm(SUBS_BASE, `/subscriptions/plans/${existing.planId}`)
       const amount = remote?.data?.attributes?.amount
       if (amount === cfg.amount) {
         console.log(`  keep   ${tier}: ${existing.planId} (₱${cfg.amount / 100})`)
@@ -77,7 +77,7 @@ for (const [tier, cfg] of Object.entries(PRICES)) {
       console.log(`  stored ${tier} plan ${existing.planId} not found remotely — re-creating.`)
     }
   }
-  const created = await pm(SUBS_BASE, '/plans', {
+  const created = await pm(SUBS_BASE, '/subscriptions/plans', {
     method: 'POST',
     body: JSON.stringify({
       data: {
