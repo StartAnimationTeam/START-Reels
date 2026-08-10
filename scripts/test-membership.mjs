@@ -94,10 +94,15 @@ try {
     h.check('member balance untouched', (await bal(MEMBER)) === memberBefore)
 
     const src = await sql(`
-      select source::text as s from public.video_entitlements
+      select source::text as s, expires_at,
+             (select expires_at from public.memberships where user_id = '${MEMBER}') as member_until
+      from public.video_entitlements
       where user_id = '${MEMBER}' and video_id = '${ep1}'
     `)
     h.check("entitlement source is 'membership'", src[0]?.s === 'membership', src[0]?.s)
+    h.check('member entitlement expires WITH the membership (0031 rental)',
+      src[0]?.expires_at === src[0]?.member_until,
+      `${src[0]?.expires_at} vs ${src[0]?.member_until}`)
 
     const ledger = await sql(`
       select count(*)::int as n from public.credit_ledger
@@ -121,9 +126,16 @@ try {
     h.check('a member unlocks members-only for 0', Number(res.charged) === 0, JSON.stringify(res))
   }
 
-  h.section('Expiry is the truth')
+  h.section('Expiry is the truth — and membership access RENTS (0031)')
   {
-    await sql(`update public.memberships set expires_at = now() - interval '1 hour' where user_id = '${MEMBER}'`)
+    // Natural expiry: entitlements are PINNED to the membership horizon, so
+    // at T+30d both die together. Simulate that instant by moving both into
+    // the past (the admin "End now" path does exactly this bulk-expire).
+    await sql(`
+      update public.memberships set expires_at = now() - interval '1 hour' where user_id = '${MEMBER}';
+      update public.video_entitlements set expires_at = now() - interval '1 hour'
+      where user_id = '${MEMBER}' and source = 'membership' and expires_at > now();
+    `)
 
     const refused = await unlockErr(MEMBER, vip1)
     h.check('an EXPIRED member is refused members-only content', refused?.includes('members_only'), refused ?? 'NO ERROR')
@@ -133,10 +145,15 @@ try {
     h.check('an expired member pays like everyone else', Number(res.charged) === 2, JSON.stringify(res))
     h.check('…and the coins actually moved', (await bal(MEMBER)) === before - 2)
 
-    // What was unlocked DURING membership stays unlocked (entitlement wins).
-    const replay = await unlock(MEMBER, vip2)
-    h.check('members-only content unlocked while a member SURVIVES expiry',
-      replay.already_unlocked === true && Number(replay.charged) === 0, JSON.stringify(replay))
+    // The 0031 owner call: what membership unlocked LOCKS AGAIN with it.
+    const vipAgain = await unlockErr(MEMBER, vip2)
+    h.check('members-only content unlocked as a member LOCKS again after expiry',
+      vipAgain?.includes('members_only'), vipAgain ?? 'STILL UNLOCKED')
+
+    const paidAgain = await unlock(MEMBER, ep1)
+    h.check('a paid episode unlocked as a member charges again after expiry',
+      paidAgain.already_unlocked !== true && Number(paidAgain.charged) === 2, JSON.stringify(paidAgain))
+    h.check('…coins moved again', (await bal(MEMBER)) === before - 4)
   }
 
   h.section('Weekly tier (0029)')

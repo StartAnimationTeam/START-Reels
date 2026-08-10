@@ -235,11 +235,22 @@ Deno.serve(async (req) => {
         .eq('user_id', targetId)
         .maybeSingle()
       if (!existing) return fail(req, 'not_found', 404)
+      const now = new Date().toISOString()
       const { error } = await db
         .from('memberships')
-        .update({ expires_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .update({ expires_at: now, updated_at: now })
         .eq('user_id', targetId)
       if (error) return fail(req, 'update_failed', 500, error.message)
+      // Membership access RENTS (0031): ending it now also ends everything
+      // it unlocked. Coin purchases are untouched — those were bought.
+      const { error: entErr } = await db
+        .from('video_entitlements')
+        .update({ expires_at: now })
+        .eq('user_id', targetId)
+        .eq('source', 'membership')
+        .is('revoked_at', null)
+        .gt('expires_at', now)
+      if (entErr) return fail(req, 'update_failed', 500, entErr.message)
       await audit(db, ctx.userId, 'user.membership_revoked', 'user', targetId, existing, null)
       return json(req, { ok: true })
     }
