@@ -70,3 +70,9 @@ verify_jwt = false
 
 [functions.ads-ssv]
 verify_jwt = false
+
+[functions.paymongo-webhook]
+verify_jwt = false
+
+[functions.subscriptions-manage]
+verify_jwt = false

@@ -139,6 +139,19 @@ try {
       replay.already_unlocked === true && Number(replay.charged) === 0, JSON.stringify(replay))
   }
 
+  h.section('Weekly tier (0029)')
+  {
+    await sql(`
+      update public.memberships
+      set tier = 'weekly', expires_at = now() + interval '7 days'
+      where user_id = '${MEMBER}'
+    `)
+    const res = await unlock(MEMBER, ep3)
+    h.check('a weekly member unlocks a paid episode for 0', Number(res.charged) === 0, JSON.stringify(res))
+    // Back to expired — the helper check below asserts the expired truth.
+    await sql(`update public.memberships set expires_at = now() - interval '1 hour' where user_id = '${MEMBER}'`)
+  }
+
   h.section('Client surface')
   {
     const grant = await sqlExpectError(`
@@ -152,7 +165,6 @@ try {
     h.check('has_active_membership reads the truth (expired → false)', helper[0].m === false)
   }
 
-  void ep3
 } finally {
   console.log('\nCleaning up...')
   await cleanup()

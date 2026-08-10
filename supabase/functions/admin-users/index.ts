@@ -27,7 +27,7 @@ interface Body {
   action?: string
   userId?: string
   role?: 'creator' | 'moderator' | 'administrator'
-  tier?: 'monthly' | 'annual'
+  tier?: 'weekly' | 'monthly' | 'annual'
   grant?: boolean
   reason?: string
   until?: string
@@ -199,8 +199,10 @@ Deno.serve(async (req) => {
     case 'grant_membership': {
       if (!ctx.isAdmin) return fail(req, 'forbidden', 403)
       const tier = body.tier
-      if (tier !== 'monthly' && tier !== 'annual') return fail(req, 'bad_request', 400)
-      const days = tier === 'annual' ? 365 : 30
+      if (tier !== 'weekly' && tier !== 'monthly' && tier !== 'annual') {
+        return fail(req, 'bad_request', 400)
+      }
+      const days = tier === 'annual' ? 365 : tier === 'monthly' ? 30 : 7
 
       const { data: existing } = await db
         .from('memberships')

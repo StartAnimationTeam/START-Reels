@@ -22,7 +22,7 @@ export type ClaimResult = 'claimed' | 'already_processed'
 export async function claim(
   db: SupabaseClient,
   eventId: string,
-  source: 'clerk' | 'bunny',
+  source: 'clerk' | 'bunny' | 'paymongo',
   eventType?: string,
 ): Promise<ClaimResult> {
   const { error } = await db

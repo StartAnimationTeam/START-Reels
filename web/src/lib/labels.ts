@@ -72,6 +72,7 @@ export const MEMBERSHIP_COMING_SOON =
   'Buying a membership opens soon. Until then, every episode unlocks with coins.'
 
 export const MEMBER_TIER_LABELS: Record<string, string> = {
+  weekly: 'Weekly Membership',
   monthly: 'Monthly Membership',
   annual: 'Annual Membership',
 }

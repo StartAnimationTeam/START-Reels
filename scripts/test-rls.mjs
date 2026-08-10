@@ -398,7 +398,7 @@ async function main() {
 
     // -- 3. anonymous access ----------------------------------------------
     console.log('\nAnonymous access (publishable key only, no user token):')
-    for (const table of ['profiles', 'credit_ledger', 'user_roles', 'audit_logs', 'favorites', 'series_follows', 'episode_likes', 'ad_reward_events', 'memberships']) {
+    for (const table of ['profiles', 'credit_ledger', 'user_roles', 'audit_logs', 'favorites', 'series_follows', 'episode_likes', 'ad_reward_events', 'memberships', 'payment_subscriptions', 'payment_invoices', 'payment_customers']) {
       const r = await rest(`${table}?select=*&limit=5`, {})
       const n = Array.isArray(r.data) ? r.data.length : 0
       check(`anon reads nothing from ${table}`, n === 0, `saw ${n} rows`)

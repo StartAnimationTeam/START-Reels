@@ -73,6 +73,8 @@ const EXPECTED = [
   'ad_reward_events',
   // Memberships (0028)
   'memberships',
+  // PayMongo payment rail (0029)
+  'payment_customers', 'payment_subscriptions', 'payment_invoices',
 ]
 
 const tables = await sql(`
@@ -314,6 +316,30 @@ check(
   Array.isArray(rungs) && rungs.length === 7 && rungs.every((n) => Number.isInteger(n) && n >= 1),
   `got ${JSON.stringify(rungs)}`,
 )
+
+// ── payment rail (0029) column allowlist ─────────────────────────────────
+console.log('\nPayment rail:')
+const subGrants = await sql(`
+  select column_name from information_schema.column_privileges
+  where table_schema = 'public' and table_name = 'payment_subscriptions'
+    and grantee = 'authenticated' and privilege_type = 'SELECT'
+`)
+const grantedCols = new Set(subGrants.map((r) => r.column_name))
+check(
+  'payment_subscriptions: provider ids are NOT client-selectable',
+  !grantedCols.has('provider_subscription_id') && !grantedCols.has('provider_plan_id'),
+  `granted: ${[...grantedCols].join(', ')}`,
+)
+check(
+  'payment_subscriptions: status columns ARE client-selectable',
+  ['user_id', 'tier', 'status', 'current_period_end'].every((c) => grantedCols.has(c)),
+  `granted: ${[...grantedCols].join(', ')}`,
+)
+const weeklyOk = await sql(`
+  select pg_get_constraintdef(oid) as def from pg_constraint
+  where conname = 'memberships_tier_check'
+`)
+check("memberships tier check includes 'weekly' (0029)", weeklyOk[0]?.def?.includes("'weekly'"), weeklyOk[0]?.def)
 
 // ── ledger round trip ─────────────────────────────────────────────────────
 console.log('\nLedger behaviour:')

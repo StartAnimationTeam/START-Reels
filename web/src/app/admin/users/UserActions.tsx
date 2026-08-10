@@ -166,6 +166,10 @@ export function UserActions({
             ‹
           </button>
           <button disabled={busy} className={button}
+            onClick={() => void run(() => api.user('grant_membership', userId, { tier: 'weekly' }))}>
+            +1 week
+          </button>
+          <button disabled={busy} className={button}
             onClick={() => void run(() => api.user('grant_membership', userId, { tier: 'monthly' }))}>
             +1 month
           </button>

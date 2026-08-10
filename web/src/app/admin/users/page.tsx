@@ -107,7 +107,7 @@ export default async function AdminUsersPage({
                       {membership ? (
                         <span className="text-xs" title={`until ${new Date(membership.expires_at).toLocaleDateString()}`}>
                           <span className="brand-gradient-text font-semibold">
-                            {membership.tier === 'annual' ? 'Annual' : 'Monthly'}
+                            {membership.tier === 'annual' ? 'Annual' : membership.tier === 'monthly' ? 'Monthly' : 'Weekly'}
                           </span>
                         </span>
                       ) : (
