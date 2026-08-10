@@ -85,8 +85,17 @@ export function StreamPlayer({
     if (!video) return
     setVideoEl(video)
 
-    // Safari exposes native HLS via canPlayType; prefer it there.
-    const nativeHls = video.canPlayType('application/vnd.apple.mpegurl') !== ''
+    // Trap #4, hardened: newer Chromium answers "maybe" to the Apple-HLS
+    // canPlayType probe while still being unable to demux HLS — feeding it
+    // the playlist ends in DEMUXER_ERROR + ERR_BLOCKED_BY_ORB and an
+    // eternal spinner (an Edge auto-update shipped exactly this). So the
+    // canPlayType answer is only trusted on REAL Safari; everyone else
+    // with MSE gets hls.js; the no-MSE + claims-HLS leftover (old iOS
+    // webviews) still falls through to native below.
+    const claimsNativeHls = video.canPlayType('application/vnd.apple.mpegurl') !== ''
+    const ua = navigator.userAgent
+    const isRealSafari = /Safari\//.test(ua) && !/Chrome|Chromium|CriOS|Edg\/|OPR\//.test(ua)
+    const nativeHls = claimsNativeHls && (isRealSafari || !Hls.isSupported())
 
     if (nativeHls) {
       video.src = src
